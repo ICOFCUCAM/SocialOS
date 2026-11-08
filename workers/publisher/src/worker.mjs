@@ -105,13 +105,13 @@ async function refreshProviderToken(account, row) {
     const access = encryptStoredToken(result.access_token);
     const rotatedRefresh = result.refresh_token ? encryptStoredToken(result.refresh_token) : null;
     const updated = await db.from("social_account_tokens").update({
-      access_token_nonce: "\\\\x" + access.nonce.toString("hex"),
-      access_token_ciphertext: "\\\\x" + access.ciphertext.toString("hex"),
-      access_token_tag: "\\\\x" + access.tag.toString("hex"),
+      access_token_nonce: "\\x" + access.nonce.toString("hex"),
+      access_token_ciphertext: "\\x" + access.ciphertext.toString("hex"),
+      access_token_tag: "\\x" + access.tag.toString("hex"),
       ...(rotatedRefresh ? {
-        refresh_token_nonce: "\\\\x" + rotatedRefresh.nonce.toString("hex"),
-        refresh_token_ciphertext: "\\\\x" + rotatedRefresh.ciphertext.toString("hex"),
-        refresh_token_tag: "\\\\x" + rotatedRefresh.tag.toString("hex")
+        refresh_token_nonce: "\\x" + rotatedRefresh.nonce.toString("hex"),
+        refresh_token_ciphertext: "\\x" + rotatedRefresh.ciphertext.toString("hex"),
+        refresh_token_tag: "\\x" + rotatedRefresh.tag.toString("hex")
       } : {}),
       access_token_expires_at: result.expires_in ? new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() : null,
       refresh_token_expires_at: result.refresh_token_expires_in ? new Date(Date.now() + Number(result.refresh_token_expires_in) * 1000).toISOString() : current.refresh_token_expires_at,
@@ -126,7 +126,6 @@ async function refreshProviderToken(account, row) {
 }
 async function getToken(account) {
   const row = await must(await db.from("social_account_tokens").select("*").eq("social_account_id", account.id).eq("organization_id", account.organization_id).single(), "Encrypted credentials not found");
-  const configuredVersion = process.env.SOCIAL_TOKEN_KEY_VERSION || "v1";
   if (row.access_token_expires_at && Date.parse(row.access_token_expires_at) <= Date.now() + 120_000) {
     try {
       await refreshProviderToken(account, row);
