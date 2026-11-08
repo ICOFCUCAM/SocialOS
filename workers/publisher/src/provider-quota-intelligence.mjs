@@ -57,10 +57,9 @@ export function youtubeQuotaResetDelay(now = new Date()) {
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   const local = new Date(Date.UTC(Number(values.year), Number(values.month)-1, Number(values.day)));
   local.setUTCDate(local.getUTCDate()+1);
-  const nextDate = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit"
-  }).format(local);
-  const [year,month,day] = nextDate.split("-").map(Number);
+  const year = local.getUTCFullYear();
+  const month = local.getUTCMonth()+1;
+  const day = local.getUTCDate();
   // Resolve the next Pacific midnight by iteratively correcting the UTC guess;
   // this handles PST/PDT without assuming a fixed UTC offset.
   let target = Date.UTC(year,month-1,day);
