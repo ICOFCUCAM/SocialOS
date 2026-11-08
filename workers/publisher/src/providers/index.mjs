@@ -1,5 +1,5 @@
 import { PublishError } from "../errors.mjs";
-import { publishFacebook, publishInstagram } from "./meta.mjs";
+import { publishFacebookPage, publishInstagram } from "./meta.mjs";
 import { publishYouTube } from "./youtube.mjs";
 import { publishLinkedIn } from "./linkedin.mjs";
 
