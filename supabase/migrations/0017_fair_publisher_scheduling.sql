@@ -58,15 +58,17 @@ begin
       from public.publish_jobs j
       left join public.publish_organization_fairness f
         on f.organization_id=j.organization_id
+      left join (
+        select organization_id,count(*) as running_count
+        from public.publish_jobs
+        where status='running'
+        group by organization_id
+      ) running on running.organization_id=j.organization_id
       where j.status in ('queued','retry')
         and j.available_at<=now()
         and j.attempt_count<j.max_attempts
-        and (
-          select count(*) from public.publish_jobs running
-          where running.organization_id=j.organization_id
-            and running.status='running'
-        ) < v_org_limit
-      group by j.organization_id,f.last_claimed_at
+      group by j.organization_id,f.last_claimed_at,running.running_count
+      having coalesce(running.running_count,0)<v_org_limit
       order by fairness_at,oldest_due,j.organization_id
       limit 1
     ) candidate;
