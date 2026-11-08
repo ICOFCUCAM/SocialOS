@@ -262,7 +262,7 @@ async function handleJob(job) {
   try {
     context = await getTarget(job);
     const appId = context.account.platform === "facebook" || context.account.platform === "instagram"
-      ? process.env.META_APP_ID
+      ? (process.env.META_APP_ID || process.env.META_CLIENT_ID)
       : context.account.platform === "youtube" ? process.env.GOOGLE_CLIENT_ID
       : context.account.platform === "linkedin" ? process.env.LINKEDIN_CLIENT_ID : "default";
     rateLimitScope = { platform: context.account.platform, accountId: context.account.id, appId: appId || "default" };
