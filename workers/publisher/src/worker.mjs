@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { publishTarget } from "./providers/index.mjs";
 import { PublishError } from "./errors.mjs";
 import { computeRetryDelay, classifyPublishFailure } from "./retry-policy.mjs";
+import { resolveTargetContent } from "./content-version.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -43,8 +44,7 @@ async function getTarget(job) {
     .eq("post_id", post.id).eq("organization_id", job.organization_id)
     .eq("is_default", true).single(), "Default content version lookup failed");
   return {
-    target, post, contentVersion: accountVersion || defaultVersion,
-    hasAccountVersion: Boolean(accountVersion),
+    target, post, contentVersion: resolveTargetContent({ defaultVersion, accountVersion, target }),
     account: { ...account, platform: platform.code }
   };
 }
@@ -277,10 +277,8 @@ async function handleJob(job) {
       post: {
         ...context.post,
         title: context.contentVersion.title ?? context.post.title,
-        body: context.hasAccountVersion
-          ? context.contentVersion.body
-          : (target.caption_override ?? context.contentVersion.body),
-        platformOptions: context.contentVersion.platform_options || target.platform_options || {}
+        body: context.contentVersion.body,
+        platformOptions: context.contentVersion.platform_options
       },
       media
     });
