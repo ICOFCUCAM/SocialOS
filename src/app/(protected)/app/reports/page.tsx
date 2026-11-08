@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowDownRight, ArrowUpRight, FileDown, FileSpreadsheet, ShieldCheck } from "lucide-react";
+import { PrintReportButton } from "@/components/app/print-report-button";
 
 type MetricRow = { target_id: string; metric_date: string; impressions: number | null; reach: number | null; engagements: number | null; clicks: number | null };
 type AccountRow = { id: string; platform_id: string };
@@ -87,13 +88,13 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     return `${platformName(report.code)}: ${fmt(impressions.current)} reported impressions and ${fmt(engagements.current)} reported engagements. Impressions changed ${delta(impressions.current, impressions.previous)}; engagements changed ${delta(engagements.current, engagements.previous)} versus the preceding ${days}-day period. These measures are provider-specific and are not compared with other platforms.`;
   });
 
-  return <div className="space-y-8">
+  return <div className="report-print-root space-y-8">
     <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div><p className="text-xs font-semibold tracking-[.16em] text-[#176b4b]">INSIGHT DISTRIBUTION</p><h1 className="mt-3 text-3xl font-semibold tracking-tight">Reports & exports</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#77847b]">Compare provider-reported daily performance across equivalent periods and prepare a factual executive brief.</p></div>
-      <Link href={`/api/social/reports/export?from=${from}&to=${to}`} className="inline-flex items-center gap-2 rounded-xl border border-[#dfe8df] bg-white px-4 py-3 text-xs font-semibold text-[#176b4b] hover:bg-[#f7faf7]"><FileDown size={15}/> Export current period</Link>
+      <div className="report-print-hidden flex flex-wrap gap-2"><PrintReportButton/><Link href={`/api/social/reports/export?from=${from}&to=${to}`} className="inline-flex items-center gap-2 rounded-xl border border-[#dfe8df] bg-white px-4 py-3 text-xs font-semibold text-[#176b4b] hover:bg-[#f7faf7]"><FileDown size={15}/> Export CSV</Link></div>
     </section>
 
-    <section className="rounded-2xl border border-[#e6ece6] bg-white p-6 sm:p-7">
+    <section className="report-print-hidden rounded-2xl border border-[#e6ece6] bg-white p-6 sm:p-7">
       <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#edf5ef] text-[#176b4b]"><FileSpreadsheet size={19}/></span><div><h2 className="text-sm font-semibold">Reporting period</h2><p className="mt-1 text-[11px] text-[#89958d]">Comparison uses the immediately preceding period of equal length.</p></div></div>
       <form method="get" action="/app/reports" className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
         <label className="flex-1 text-xs font-medium text-[#536158]">From<input required type="date" name="from" max={to} defaultValue={from} className="mt-2 block w-full rounded-xl border border-[#e3eae3] px-3 py-3 text-sm outline-none focus:border-[#79a98a]"/></label>
