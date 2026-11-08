@@ -1,0 +1,11 @@
+{
+  "name": "@socialos/media-processor",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": { "start": "node src/worker.mjs" },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
+    "sharp": "^0.34.4"
+  }
+}
