@@ -58,24 +58,12 @@ export async function DELETE(_request:NextRequest,{params}:Context) {
   if(accountError || !account) return NextResponse.json({error:"Social account not found."},{status:404});
 
   const admin=createSocialAdminClient();
-  const {error:tokenError}=await admin.from("social_account_tokens").delete()
-    .eq("social_account_id",account.id).eq("organization_id",membership.organization_id);
-  if(tokenError) return NextResponse.json({error:"Unable to remove stored credentials. The account remains connected."},{status:500});
-
-  const {error:updateError}=await admin.from("social_accounts").update({
-    connection_status:"disconnected",
-    last_error:null
-  }).eq("id",account.id).eq("organization_id",membership.organization_id);
-  if(updateError) return NextResponse.json({error:"Credentials were removed but account status could not be updated. Contact support."},{status:500});
-
-  await admin.from("audit_events").insert({
-    organization_id:membership.organization_id,
-    actor_user_id:user.id,
-    action:"social_account.disconnected",
-    resource_type:"social_account",
-    resource_id:account.id,
-    metadata:{platform:(account.platform as {code:string}|null)?.code??"unknown"}
+  const {error:disconnectError}=await admin.rpc("disconnect_social_account",{
+    p_account_id:account.id,
+    p_organization_id:membership.organization_id,
+    p_actor_user_id:user.id
   });
+  if(disconnectError) return NextResponse.json({error:"Unable to disconnect the account. Stored credentials and account status were left unchanged."},{status:500});
 
   return NextResponse.json({ok:true,message:"Stored SocialOS credentials have been removed. You may also revoke SocialOS access in the platform's security settings."});
 }
