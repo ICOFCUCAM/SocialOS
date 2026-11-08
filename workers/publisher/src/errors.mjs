@@ -9,6 +9,8 @@ export class PublishError extends Error {
   }
 }
 
+import { classifyProviderQuotaError } from "./provider-quota-intelligence.mjs";
+
 export async function providerJson(response, provider) {
   const text = await response.text();
   let body = {};
@@ -16,11 +18,18 @@ export async function providerJson(response, provider) {
   if (!response.ok) {
     const retryable = response.status === 429 || response.status >= 500;
     const retryAfter = Number(response.headers.get("retry-after"));
+    const quota = classifyProviderQuotaError(provider, body);
+    const headerRetryAfter = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : null;
+    const metaUsage = provider === "Facebook" || provider === "Instagram"
+      ? (await import("./provider-quota-intelligence.mjs")).parseMetaUsageHeaders(response.headers)
+      : null;
     throw new PublishError(provider + " API returned HTTP " + response.status, {
-      code: response.status === 401 ? "AUTHORIZATION_REVOKED" : response.status === 403 ? "PROVIDER_PERMISSION_DENIED" : provider.toUpperCase() + "_HTTP_" + response.status,
-      retryable,
-      retryAfterMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : null,
-      ambiguous: response.status >= 500
+      code: quota?.code || (response.status === 401 ? "AUTHORIZATION_REVOKED" : response.status === 403 ? "PROVIDER_PERMISSION_DENIED" : provider.toUpperCase() + "_HTTP_" + response.status),
+      retryable: quota?.retryable ?? retryable,
+      retryAfterMs: headerRetryAfter ?? quota?.retryAfterMs ?? null,
+      ambiguous: response.status >= 500,
+      quotaScope: quota?.quotaScope || null,
+      usage: metaUsage
     });
   }
   return body;
