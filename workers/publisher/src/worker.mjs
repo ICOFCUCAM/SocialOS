@@ -13,6 +13,7 @@ if (!supabaseUrl || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROL
 const db = createClient(supabaseUrl, key, { auth: { autoRefreshToken: false, persistSession: false } });
 const workerId = process.env.PUBLISH_WORKER_ID || "publisher-" + randomUUID();
 const pollMs = Math.max(500, Number(process.env.PUBLISH_POLL_INTERVAL_MS) || 2500);
+const workerConcurrency = Math.max(1, Math.min(20, Number(process.env.PUBLISH_CONCURRENCY) || 5));
 const signedUrlSeconds = Math.max(60, Math.min(900, Number(process.env.PUBLISH_MEDIA_URL_TTL_SECONDS) || 600));
 const maxVideoBytes = Math.max(1, Number(process.env.PUBLISH_MAX_VIDEO_BYTES) || 250 * 1024 * 1024);
 let stopping = false;
@@ -317,9 +318,9 @@ async function handleJob(job) {
 async function poll() {
   const { error: recoveryError } = await db.rpc("recover_stale_publish_jobs", { p_lease_minutes: 15 });
   if (recoveryError) throw recoveryError;
-  const { data, error } = await db.rpc("claim_publish_jobs", { p_worker_id: workerId, p_limit: 1 });
+  const { data, error } = await db.rpc("claim_publish_jobs", { p_worker_id: workerId, p_limit: workerConcurrency });
   if (error) throw error;
-  for (const job of data || []) await handleJob(job);
+  await Promise.all((data || []).map(job => handleJob(job)));
   return (data || []).length;
 }
 process.on("SIGTERM", () => { stopping = true; });
