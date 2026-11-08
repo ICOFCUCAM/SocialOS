@@ -51,29 +51,32 @@ async function getTarget(job) {
   if (account.connection_status !== "connected") throw new PublishError("Social account is not connected.", { code: "ACCOUNT_NOT_CONNECTED" });
   return { target, post, account: { ...account, platform: platform.code } };
 }
-function encryptionKey() {
-  const raw = process.env.SOCIAL_TOKEN_ENCRYPTION_KEY;
-  if (!raw) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");
+function encryptionKey(version) {
+  let keys = {};
+  if (process.env.SOCIAL_TOKEN_ENCRYPTION_KEYS) {
+    try { keys = JSON.parse(process.env.SOCIAL_TOKEN_ENCRYPTION_KEYS); }
+    catch { throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEYS must be a JSON object of base64 keys."); }
+  }
+  const currentVersion = process.env.SOCIAL_TOKEN_KEY_VERSION || "v1";
+  const raw = keys[version] || (version === currentVersion ? process.env.SOCIAL_TOKEN_ENCRYPTION_KEY : undefined);
+  if (!raw) throw new PublishError("OAuth encryption key version is unavailable: " + version, { code: "TOKEN_KEY_VERSION_MISMATCH" });
   const value = Buffer.from(raw, "base64");
-  if (value.length !== 32) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY must decode to 32 bytes.");
+  if (value.length !== 32) throw new Error("OAuth encryption keys must decode to 32 bytes.");
   return value;
 }
 function encryptStoredToken(token) {
+  const keyVersion = process.env.SOCIAL_TOKEN_KEY_VERSION || "v1";
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(keyVersion), iv);
   const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
-  return { nonce: iv, ciphertext, tag: cipher.getAuthTag() };
+  return { nonce: iv, ciphertext, tag: cipher.getAuthTag(), keyVersion };
 }
-function decryptStoredToken(nonce, ciphertext, tag) {
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), nonce);
+function decryptStoredToken(nonce, ciphertext, tag, keyVersion) {
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(keyVersion), nonce);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 async function refreshProviderToken(account, row) {
-  const configuredVersion = process.env.SOCIAL_TOKEN_KEY_VERSION || "v1";
-  if (row.encryption_key_version !== configuredVersion) {
-    throw new PublishError("Stored OAuth credentials use a different encryption key version.", { code: "TOKEN_KEY_VERSION_MISMATCH" });
-  }
   if (account.platform === "facebook" || account.platform === "instagram") {
     throw new PublishError("Meta Page tokens cannot be refreshed through the generic OAuth refresh flow; reconnect the account when expired.", { code: "REAUTHORIZATION_REQUIRED" });
   }
@@ -89,8 +92,7 @@ async function refreshProviderToken(account, row) {
   try {
     const current = await must(await db.from("social_account_tokens").select("*").eq("social_account_id", account.id).eq("organization_id", account.organization_id).single(), "Token lookup failed during refresh");
     if (current.access_token_expires_at && Date.parse(current.access_token_expires_at) > Date.now() + 120000) return;
-    if (current.encryption_key_version !== configuredVersion) throw new PublishError("Stored OAuth credentials use a different encryption key version.", { code: "TOKEN_KEY_VERSION_MISMATCH" });
-    const refreshToken = decryptStoredToken(pgBytea(current.refresh_token_nonce), pgBytea(current.refresh_token_ciphertext), pgBytea(current.refresh_token_tag));
+    const refreshToken = decryptStoredToken(pgBytea(current.refresh_token_nonce), pgBytea(current.refresh_token_ciphertext), pgBytea(current.refresh_token_tag), current.encryption_key_version);
     const clientId = account.platform === "youtube" ? process.env.GOOGLE_CLIENT_ID : process.env.LINKEDIN_CLIENT_ID;
     const clientSecret = account.platform === "youtube" ? process.env.GOOGLE_CLIENT_SECRET : process.env.LINKEDIN_CLIENT_SECRET;
     const tokenUrl = account.platform === "youtube" ? "https://oauth2.googleapis.com/token" : "https://www.linkedin.com/oauth/v2/accessToken";
@@ -122,6 +124,7 @@ async function refreshProviderToken(account, row) {
       } : {}),
       access_token_expires_at: result.expires_in ? new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() : null,
       refresh_token_expires_at: result.refresh_token_expires_in ? new Date(Date.now() + Number(result.refresh_token_expires_in) * 1000).toISOString() : current.refresh_token_expires_at,
+      encryption_key_version: access.keyVersion,
       token_type: result.token_type || current.token_type || "Bearer",
       last_refreshed_at: new Date().toISOString()
     }).eq("social_account_id", account.id).eq("organization_id", account.organization_id);
@@ -133,9 +136,6 @@ async function refreshProviderToken(account, row) {
 async function getToken(account) {
   const row = await must(await db.from("social_account_tokens").select("*").eq("social_account_id", account.id).eq("organization_id", account.organization_id).single(), "Encrypted credentials not found");
   const configuredVersion = process.env.SOCIAL_TOKEN_KEY_VERSION || "v1";
-  if (row.encryption_key_version !== configuredVersion) {
-    throw new PublishError("Stored OAuth credentials use a different encryption key version.", { code: "TOKEN_KEY_VERSION_MISMATCH" });
-  }
   if (row.access_token_expires_at && Date.parse(row.access_token_expires_at) <= Date.now() + 120_000) {
     try {
       await refreshProviderToken(account, row);
@@ -148,7 +148,7 @@ async function getToken(account) {
   }
   const latest = await must(await db.from("social_account_tokens").select("*").eq("social_account_id", account.id).eq("organization_id", account.organization_id).single(), "Unable to reload OAuth credentials");
   try {
-    return decryptStoredToken(pgBytea(latest.access_token_nonce), pgBytea(latest.access_token_ciphertext), pgBytea(latest.access_token_tag));
+    return decryptStoredToken(pgBytea(latest.access_token_nonce), pgBytea(latest.access_token_ciphertext), pgBytea(latest.access_token_tag), latest.encryption_key_version);
   } catch {
     await db.from("social_accounts").update({ connection_status: "error", last_error: "Credential decryption failed." }).eq("id", account.id);
     throw new PublishError("Stored credentials could not be decrypted.", { code: "TOKEN_DECRYPTION_FAILED" });
