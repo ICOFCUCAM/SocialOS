@@ -84,7 +84,7 @@ export async function GET(request:NextRequest) {
         const pageTokenWrite=await admin.from("social_account_tokens").upsert({
           organization_id:signed.organizationId,social_account_id:pageAccount.data.id,
           access_token_nonce:toPgBytea(pageToken.nonce),access_token_ciphertext:toPgBytea(pageToken.ciphertext),access_token_tag:toPgBytea(pageToken.tag),
-          encryption_algorithm:pageToken.algorithm,encryption_key_version:pageToken.keyVersion,token_type:"Bearer"
+          encryption_algorithm:pageToken.algorithm,encryption_key_version:pageToken.keyVersion,access_token_expires_at:longLived.expires_in?new Date(Date.now()+longLived.expires_in*1000).toISOString():null,token_type:"Bearer"
         },{onConflict:"social_account_id"});
         if (pageTokenWrite.error) throw new Error("Unable to store Facebook Page credentials.");
         saved++;
@@ -103,7 +103,7 @@ export async function GET(request:NextRequest) {
           const igTokenWrite=await admin.from("social_account_tokens").upsert({
             organization_id:signed.organizationId,social_account_id:igAccount.data.id,
             access_token_nonce:toPgBytea(igToken.nonce),access_token_ciphertext:toPgBytea(igToken.ciphertext),access_token_tag:toPgBytea(igToken.tag),
-            encryption_algorithm:igToken.algorithm,encryption_key_version:igToken.keyVersion,token_type:"Bearer"
+            encryption_algorithm:igToken.algorithm,encryption_key_version:igToken.keyVersion,access_token_expires_at:longLived.expires_in?new Date(Date.now()+longLived.expires_in*1000).toISOString():null,token_type:"Bearer"
           },{onConflict:"social_account_id"});
           if (igTokenWrite.error) throw new Error("Unable to store Instagram credentials.");
           saved++;
