@@ -27,7 +27,7 @@ export function getProvider(provider: string): ProviderConfig | null {
     if (!clientId || !clientSecret) return null;
     return {clientId,clientSecret,authorizeUrl:"https://www.linkedin.com/oauth/v2/authorization",
       tokenUrl:"https://www.linkedin.com/oauth/v2/accessToken",profileUrl:"https://api.linkedin.com/v2/userinfo",
-      scopes:["openid","profile","w_member_social"],name:"LinkedIn",platformCode:"linkedin"};
+      scopes:["openid","profile","w_member_social","r_member_postAnalytics"],name:"LinkedIn",platformCode:"linkedin"};
   }
   return null;
 }
