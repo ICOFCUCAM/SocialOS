@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { BarChart3, Eye, Heart, MousePointerClick, Play, Users, TrendingUp } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 
 type MetricRow = {
   target_id: string;
