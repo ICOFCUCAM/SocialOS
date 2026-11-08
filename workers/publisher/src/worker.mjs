@@ -93,6 +93,26 @@ async function getMedia(postId, organizationId, platform) {
   }
   return output;
 }
+async function refreshPostStatus(postId, organizationId) {
+  const targets = await must(await db.from("social_post_targets").select("status").eq("post_id", postId).eq("organization_id", organizationId), "Unable to summarize post targets");
+  if (!targets.length) return;
+  const statuses = targets.map(item => item.status);
+  const published = statuses.filter(status => status === "published").length;
+  const failed = statuses.filter(status => status === "failed").length;
+  const skipped = statuses.filter(status => status === "skipped").length;
+  const cancelled = statuses.filter(status => status === "cancelled").length;
+  const terminal = published + failed + skipped + cancelled === statuses.length;
+  let status = "processing";
+  if (published === statuses.length) status = "published";
+  else if (terminal && published > 0) status = "partially_published";
+  else if (terminal && failed === statuses.length) status = "failed";
+  else if (terminal && cancelled === statuses.length) status = "cancelled";
+  await must(await db.from("social_posts").update({
+    status,
+    published_at: published > 0 ? new Date().toISOString() : null,
+    last_error_code: failed > 0 ? "ONE_OR_MORE_TARGETS_FAILED" : null
+  }).eq("id", postId).eq("organization_id", organizationId), "Unable to update post aggregate status");
+}
 async function finish(job, target, publication) {
   const now = new Date().toISOString();
   await must(await db.from("social_post_targets").update({
@@ -104,6 +124,7 @@ async function finish(job, target, publication) {
     status: "succeeded", locked_at: null, locked_by: null, completed_at: now,
     last_error_code: null, last_error_message: null
   }).eq("id", job.id), "Unable to complete publishing job");
+  await refreshPostStatus(target.post_id, job.organization_id);
   await db.from("audit_events").insert({
     organization_id: job.organization_id, action: "social.post.published",
     resource_type: "social_post_target", resource_id: target.id,
@@ -129,6 +150,7 @@ async function fail(job, target, error) {
     last_error_code: ambiguous ? "PUBLISH_OUTCOME_UNKNOWN" : code,
     last_error_message: ambiguous ? "Provider outcome is uncertain; reconcile externally before retrying." : message
   }).eq("id", target.id).eq("organization_id", job.organization_id), "Unable to update target failure");
+  await refreshPostStatus(target.post_id, job.organization_id);
   if (terminal) {
     await db.from("social_accounts").update({
       ...(code === "REAUTHORIZATION_REQUIRED" || code === "MISSING_PUBLISH_SCOPES" ? { connection_status: "reauthorization_required" } : {}),
@@ -155,6 +177,7 @@ async function handleJob(job) {
       return;
     }
     await must(await db.from("social_post_targets").update({ status: "publishing" }).eq("id", target.id), "Unable to mark target publishing");
+    await must(await db.from("social_posts").update({ status: "processing" }).eq("id", context.post.id).eq("organization_id", job.organization_id), "Unable to mark post processing");
     const token = await getToken(context.account);
     const media = await getMedia(context.post.id, job.organization_id, context.account.platform);
     const publication = await publishTarget({
