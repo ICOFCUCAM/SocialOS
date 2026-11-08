@@ -18,7 +18,7 @@ Optional: `MEDIA_BUCKET`, `WORKER_ID`, `POLL_INTERVAL_MS`. Start with one replic
 - Download originals only from the private Supabase bucket using the service role.
 - Inspect file signatures; do not trust filename or declared MIME alone.
 - Decode and re-encode images with Sharp, applying EXIF orientation and producing a WebP preview.
-- Probe videos with ffprobe, enforce duration and pixel limits, and produce a JPEG poster with FFmpeg.
+- Probe videos with ffprobe, enforce duration and pixel limits, produce a JPEG poster, and encode a bounded H.264/AAC MP4 mezzanine derivative with FFmpeg.
 - Invoke FFmpeg with argument arrays and `shell: false`.
 - Store derivatives in the private bucket under server-generated tenant/brand/asset paths.
 - Mark an asset ready only after processing and derivative upload succeed.
@@ -27,6 +27,6 @@ Optional: `MEDIA_BUCKET`, `WORKER_ID`, `POLL_INTERVAL_MS`. Start with one replic
 
 ## Production limitations
 
-This is the first worker foundation, not a complete media-security certification. Malware scanning, video transcoding/mezzanine generation, animated-GIF policy handling, audio normalization, derivative cleanup/retention, signed preview delivery and operational metrics are not yet implemented. A valid signature and successful decode do not prove a file is malware-free. Do not describe uploaded media as malware-scanned until a scanner is integrated and enforced.
+This is the first worker foundation, not a complete media-security certification. Malware scanning, malware scanning, platform-specific renditions, animated-GIF policy handling, audio normalization, derivative cleanup/retention, signed preview delivery and operational metrics are not yet implemented. A valid signature and successful decode do not prove a file is malware-free. Do not describe uploaded media as malware-scanned until a scanner is integrated and enforced.
 
 Apply the preceding migration stack and `0008_media_worker_lease_recovery.sql` in the intended order before starting the worker. No migration is applied by this change. Verify the target Supabase project's global Storage size limit: local config currently declares 50 MiB while the private bucket migration allows 250 MiB.
