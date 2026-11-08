@@ -159,8 +159,8 @@ function requiredProfile(platform, kind) {
   if (platform === "threads") return "square";
   return "portrait";
 }
-async function getMedia(postId, organizationId, platform) {
-  const rows = await must(await db.from("social_post_media").select("position,alt_text,asset_id").eq("post_id", postId).eq("organization_id", organizationId).order("position"), "Post media lookup failed");
+async function getMedia(versionId, organizationId, platform) {
+  const rows = await must(await db.from("social_post_version_media").select("position,alt_text,asset_id").eq("version_id", versionId).eq("organization_id", organizationId).order("position"), "Content-version media lookup failed");
   const output = [];
   for (const row of rows) {
     const asset = await must(await db.from("social_media_assets").select("*").eq("id", row.asset_id).eq("organization_id", organizationId).single(), "Media asset lookup failed");
