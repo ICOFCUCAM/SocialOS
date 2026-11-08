@@ -35,3 +35,14 @@ An ambiguous provider response or expired worker lease may mean the platform acc
 Apply migrations in order through `0014` before enabling this workflow. The migration chain has not been applied to a live SocialOS Supabase project as part of this change.
 
 The publishing worker must be deployed and configured separately. A dashboard showing queue state does not prove that a worker is running or that a provider has accepted a post. Live provider verification and production deployment remain outstanding.
+
+
+## Operations dashboard integration
+
+The existing `/app/publishing` workspace page now consumes the operational summary and recent event history introduced in migration 0018. It adds 24-hour delivery/dead-letter metrics, oldest overdue job, retry count and a recent event timeline.
+
+Known retryable failures use the authenticated `/api/social/publishing/operations` action and the tenant-authorized `operator_retry_publish_job` RPC. The page does not expose a retry action for ambiguous provider outcomes.
+
+For `PUBLISH_OUTCOME_UNKNOWN`, publishers with the required workspace role can open a reconciliation form. The operator must first verify the post on the destination platform and enter its actual external post ID; the optional permalink is stored with the target. The database function performs the state transition and audit write.
+
+The dashboard uses the active workspace membership selected by the current application shell. Multi-workspace switching and account-level role resolution remain separate follow-up work; do not assume this page currently offers a workspace selector.
