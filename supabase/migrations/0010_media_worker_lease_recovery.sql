@@ -24,11 +24,13 @@ begin
         last_error_message = 'Worker lease expired before the job completed.'
     from stale s where j.id = s.id
     returning j.asset_id, j.status
+  ), marked_assets as (
+    update public.social_media_assets a set processing_status = 'failed'
+    from changed c where a.id = c.asset_id and c.status = 'dead_letter'
+    returning a.id
   )
-  update public.social_media_assets a set processing_status = 'failed'
-  from changed c where a.id = c.asset_id and c.status = 'dead_letter';
-  get diagnostics recovered = row_count;
-  return recovered;
+  select count(*)::integer into recovered from changed;
+  return coalesce(recovered, 0);
 end;
 $$;
 revoke all on function public.recover_stale_media_processing_jobs(integer) from public, anon, authenticated;
