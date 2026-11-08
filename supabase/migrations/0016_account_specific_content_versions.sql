@@ -57,14 +57,16 @@ alter table public.social_post_version_media enable row level security;
 create policy social_post_versions_select_brand on public.social_post_versions
   for select to authenticated using (
     exists(select 1 from public.social_posts p
-      where p.id=post_id and p.organization_id=organization_id
+      where p.id=social_post_versions.post_id
+        and p.organization_id=social_post_versions.organization_id
         and private.can_access_brand(p.brand_id,p.organization_id))
   );
 create policy social_post_version_media_select_brand on public.social_post_version_media
   for select to authenticated using (
     exists(select 1 from public.social_post_versions v
       join public.social_posts p on p.id=v.post_id and p.organization_id=v.organization_id
-      where v.id=version_id and v.organization_id=organization_id
+      where v.id=social_post_version_media.version_id
+        and v.organization_id=social_post_version_media.organization_id
         and private.can_access_brand(p.brand_id,p.organization_id))
   );
 
