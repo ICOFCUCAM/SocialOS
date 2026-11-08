@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
   }
 
   const filename = `socialos-performance-${from}-to-${to}.csv`;
-  return new NextResponse("\\uFEFF" + lines.join("\\r\\n"), {
+  return new NextResponse(lines.join(String.fromCharCode(13, 10)), {
     status: 200,
     headers: {
       "content-type": "text/csv; charset=utf-8",
