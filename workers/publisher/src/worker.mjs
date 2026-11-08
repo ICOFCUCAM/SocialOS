@@ -5,6 +5,7 @@ import { publishTarget } from "./providers/index.mjs";
 import { PublishError } from "./errors.mjs";
 import { computeRetryDelay, classifyPublishFailure } from "./retry-policy.mjs";
 import { resolveTargetContent } from "./content-version.mjs";
+import { waitForProviderCapacity, deferProviderCapacity } from "./provider-rate-limits.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -256,8 +257,15 @@ async function fail(job, target, error) {
 }
 async function handleJob(job) {
   let target;
+  let context;
+  let rateLimitScope;
   try {
-    const context = await getTarget(job);
+    context = await getTarget(job);
+    const appId = context.account.platform === "facebook" || context.account.platform === "instagram"
+      ? process.env.META_APP_ID
+      : context.account.platform === "youtube" ? process.env.GOOGLE_CLIENT_ID
+      : context.account.platform === "linkedin" ? process.env.LINKEDIN_CLIENT_ID : "default";
+    rateLimitScope = { platform: context.account.platform, accountId: context.account.id, appId: appId || "default" };
     target = context.target;
     if (target.status === "published" || target.platform_post_id) {
       await must(await db.from("publish_jobs").update({ status: "succeeded", locked_at: null, locked_by: null, completed_at: new Date().toISOString() }).eq("id", job.id), "Unable to close already-published job");
@@ -271,6 +279,7 @@ async function handleJob(job) {
     await must(await db.from("social_posts").update({ status: "processing" }).eq("id", context.post.id).eq("organization_id", job.organization_id), "Unable to mark post processing");
     const token = await getToken(context.account);
     const media = await getMedia(context.contentVersion.id, job.organization_id, context.account.platform);
+    await waitForProviderCapacity(rateLimitScope);
     const publication = await publishTarget({
       account: { ...context.account, granted_scopes: context.account.granted_scopes || [] },
       token,
@@ -284,6 +293,10 @@ async function handleJob(job) {
     });
     await finish(job, target, { ...publication, platform: context.account.platform });
   } catch (error) {
+    if (rateLimitScope && (error?.code === "META_HTTP_429" || error?.code === "FACEBOOK_HTTP_429" || error?.code === "INSTAGRAM_HTTP_429" || error?.code === "LINKEDIN_HTTP_429" || error?.code === "YOUTUBE_HTTP_429")) {
+      try { await deferProviderCapacity(rateLimitScope, error.retryAfterMs || 60000); }
+      catch (coordinationError) { process.stderr.write(JSON.stringify({ event: "provider_rate_limit_persist_failed", jobId: job.id, code: coordinationError.code || "RATE_LIMIT_COORDINATOR_UNAVAILABLE" }) + "\\n"); }
+    }
     const lookup = await db.from("social_post_targets").select("*").eq("id", job.target_id).eq("organization_id", job.organization_id).maybeSingle();
     if (lookup.data?.platform_post_id) {
       await db.from("publish_jobs").update({
