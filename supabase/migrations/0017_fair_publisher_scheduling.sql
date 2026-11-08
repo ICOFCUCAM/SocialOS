@@ -30,64 +30,94 @@ as $$
 declare
   v_limit integer := greatest(1,least(coalesce(p_limit,10),50));
   v_org_limit integer := greatest(1,least(coalesce(p_org_concurrency_limit,3),20));
+  v_iteration integer;
+  v_org_id uuid;
+  v_job_id uuid;
+  v_running integer;
+  v_claimed public.publish_jobs%rowtype;
 begin
   if p_worker_id is null or length(trim(p_worker_id))=0 or length(p_worker_id)>200 then
     raise exception 'A valid publisher worker ID is required' using errcode='22023';
   end if;
 
-  -- Serialize only the short claim transaction so concurrent replicas cannot
-  -- over-claim a workspace's configured in-flight allowance.
+  -- Serialize short claim transactions so workspace concurrency limits are
+  -- respected across all replicas, not merely within one worker process.
   perform pg_advisory_xact_lock(hashtext('socialos:publish-job-claim'));
 
-  return query
-  with due as materialized (
-    select j.id,j.organization_id,j.available_at,j.created_at,
-      coalesce(f.last_claimed_at,'-infinity'::timestamptz) as fairness_at,
-      row_number() over (
-        partition by j.organization_id
-        order by j.available_at,j.created_at,j.id
-      ) as org_rank
-    from public.publish_jobs j
-    left join public.publish_organization_fairness f
-      on f.organization_id=j.organization_id
-    where j.status in ('queued','retry')
-      and j.available_at<=now()
-      and j.attempt_count<j.max_attempts
-      and (
-        select count(*) from public.publish_jobs running
-        where running.organization_id=j.organization_id
-          and running.status='running'
-      ) < v_org_limit
-    order by fairness_at,j.available_at,j.created_at
-    for update of j skip locked
-  ),
-  chosen as (
-    select id,organization_id,org_rank,fairness_at,available_at,created_at
-    from due
-    order by org_rank,fairness_at,available_at,created_at
-    limit v_limit
-  ),
-  claimed as (
-    update public.publish_jobs j
+  for v_iteration in 1..v_limit loop
+    v_org_id := null;
+    v_job_id := null;
+
+    -- Re-evaluate after each claim. Updating the fairness cursor rotates the
+    -- next selection to another workspace before this one gets another slot.
+    select candidate.organization_id into v_org_id
+    from (
+      select j.organization_id,
+        coalesce(f.last_claimed_at,'-infinity'::timestamptz) as fairness_at,
+        min(j.available_at) as oldest_due
+      from public.publish_jobs j
+      left join public.publish_organization_fairness f
+        on f.organization_id=j.organization_id
+      where j.status in ('queued','retry')
+        and j.available_at<=now()
+        and j.attempt_count<j.max_attempts
+        and (
+          select count(*) from public.publish_jobs running
+          where running.organization_id=j.organization_id
+            and running.status='running'
+        ) < v_org_limit
+      group by j.organization_id,f.last_claimed_at
+      order by fairness_at,oldest_due,j.organization_id
+      limit 1
+    ) candidate;
+
+    exit when v_org_id is null;
+
+    select count(*) into v_running
+    from public.publish_jobs
+    where organization_id=v_org_id and status='running';
+    if v_running>=v_org_limit then
+      continue;
+    end if;
+
+    select id into v_job_id
+    from public.publish_jobs
+    where organization_id=v_org_id
+      and status in ('queued','retry')
+      and available_at<=now()
+      and attempt_count<max_attempts
+    order by available_at,created_at,id
+    limit 1
+    for update skip locked;
+
+    if v_job_id is null then
+      -- This can occur if a row was locked by a recovery/maintenance process.
+      -- Mark the workspace cursor so another workspace can be considered.
+      insert into public.publish_organization_fairness(organization_id,last_claimed_at,updated_at)
+      values(v_org_id,now(),now())
+      on conflict(organization_id) do update
+        set last_claimed_at=excluded.last_claimed_at,updated_at=excluded.updated_at;
+      continue;
+    end if;
+
+    update public.publish_jobs
     set status='running',locked_at=now(),locked_by=p_worker_id,
-        attempt_count=j.attempt_count+1
-    from chosen c
-    where j.id=c.id
-    returning j.*
-  ),
-  touched_orgs as (
+        attempt_count=attempt_count+1
+    where id=v_job_id
+    returning * into v_claimed;
+
     insert into public.publish_organization_fairness(organization_id,last_claimed_at,updated_at)
-    select distinct organization_id,now(),now() from claimed
+    values(v_org_id,now(),now())
     on conflict(organization_id) do update
-      set last_claimed_at=excluded.last_claimed_at,updated_at=excluded.updated_at
-    returning organization_id
-  )
-  select c.* from claimed c;
+      set last_claimed_at=excluded.last_claimed_at,updated_at=excluded.updated_at;
+
+    return next v_claimed;
+  end loop;
 end;
 $$;
 
 revoke all on function public.claim_publish_jobs(text,integer) from public,anon,authenticated,service_role;
-revoke all on function public.claim_publish_jobs(text,integer,integer) from public,anon,authenticated;
+revoke all on function public.claim_publish_jobs(text,integer,integer) from public,anon,authenticated,service_role;
 grant execute on function public.claim_publish_jobs(text,integer,integer) to service_role;
 
 comment on table public.publish_organization_fairness is
