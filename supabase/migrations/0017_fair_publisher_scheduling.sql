@@ -19,8 +19,8 @@ create index publish_jobs_org_running_idx
 
 create or replace function public.claim_publish_jobs(
   p_worker_id text,
-  p_limit integer default 10,
-  p_org_concurrency_limit integer default 3
+  p_limit integer,
+  p_org_concurrency_limit integer
 )
 returns setof public.publish_jobs
 language plpgsql
@@ -122,3 +122,18 @@ grant execute on function public.claim_publish_jobs(text,integer,integer) to ser
 
 comment on table public.publish_organization_fairness is
   'Service-only workspace claim fairness cursor for durable publisher scheduling.';
+
+
+-- Preserve the existing worker RPC contract (two arguments) while routing all
+-- claims through the fair scheduler. The three-argument implementation is
+-- callable only by this SECURITY DEFINER wrapper.
+create or replace function public.claim_publish_jobs(p_worker_id text,p_limit integer default 10)
+returns setof public.publish_jobs
+language sql
+security definer
+set search_path=public,pg_temp
+as $$
+  select * from public.claim_publish_jobs(p_worker_id,p_limit,3);
+$$;
+revoke all on function public.claim_publish_jobs(text,integer) from public,anon,authenticated;
+grant execute on function public.claim_publish_jobs(text,integer) to service_role;
