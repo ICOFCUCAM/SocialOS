@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PublishingJobRetry } from "@/components/app/publishing-job-retry";
 import { PublishingJobReconcile } from "@/components/app/publishing-job-reconcile";
-import { Activity, AlertTriangle, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, Radio, Send, Video } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, Radio, Send } from "lucide-react";
 
 type SearchParams=Promise<{view?:string}>;
 const views=["all","queued","published","failed"] as const;
@@ -60,8 +60,6 @@ export default async function PublishingPage({searchParams}:{searchParams:Search
   const accountMap=new Map((accounts??[]).map(a=>[a.id,a]));
   const postMap=new Map(postRows.map(p=>[p.id,p]));
   const targetMap=new Map(targetRows.map(t=>[t.id,t]));
-  const jobByTarget=new Map<string,typeof jobRows[number]>();
-  for(const job of jobRows) if(!jobByTarget.has(job.target_id)) jobByTarget.set(job.target_id,job);
   const canRetry=["owner","administrator","manager","publisher"].includes(member.role);
   const visibleJobs=jobRows.filter(job=>{
     if(view==="queued") return ["queued","retry","running"].includes(job.status);
