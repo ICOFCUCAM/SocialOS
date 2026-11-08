@@ -105,7 +105,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     </section>
 
     <section className="space-y-4"><div><h2 className="text-lg font-semibold">Executive brief</h2><p className="mt-1 text-xs text-[#89958d]">A rules-based summary of reported figures, not AI-generated assumptions or causal claims.</p></div>
-      <article className="rounded-2xl border border-[#e6ece6] bg-white p-6 sm:p-7"><div className="flex items-center gap-2 text-xs font-semibold text-[#536158]"><ShieldCheck size={15} className="text-[#176b4b}"/> Reporting integrity</div>
+      <article className="rounded-2xl border border-[#e6ece6] bg-white p-6 sm:p-7"><div className="flex items-center gap-2 text-xs font-semibold text-[#536158]"><ShieldCheck size={15} className="text-[#176b4b]"/> Reporting integrity</div>
         {totalRows ? <ul className="mt-4 space-y-3">{summary.map(line => <li key={line} className="text-sm leading-6 text-[#536158]">{line}</li>)}</ul> : <p className="mt-4 text-sm leading-6 text-[#89958d]">No daily provider analytics are available for the selected period. The brief will populate when verified provider data has been collected.</p>}
         <p className="mt-5 border-t border-[#edf1ed] pt-4 text-[10px] leading-5 text-[#89958d]">Coverage: {totalRows} daily metric rows across {reports.filter(report => report.current.length).length} providers. Reporting days can differ by provider. This summary does not combine metrics across platforms or use lifetime snapshots.</p>
       </article>
