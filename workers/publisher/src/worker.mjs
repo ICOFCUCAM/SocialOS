@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { publishTarget } from "./providers/index.mjs";
 import { PublishError } from "./errors.mjs";
+import { computeRetryDelay, classifyPublishFailure } from "./retry-policy.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -23,11 +24,6 @@ function pgBytea(value) {
 }
 function safeMessage(error) {
   return String(error?.message || "Publishing failed").replace(/(?:access_token|Bearer)\s*[:=]?\s*[^\s&]+/gi, "[REDACTED]").slice(0, 1200);
-}
-function retryDelay(job, error) {
-  if (error?.retryAfterMs && Number.isFinite(error.retryAfterMs)) return Math.min(6 * 60 * 60 * 1000, Math.max(1000, error.retryAfterMs));
-  const base = Math.min(60 * 60 * 1000, 30_000 * (2 ** Math.max(0, job.attempt_count - 1)));
-  return Math.round(base * (0.8 + Math.random() * 0.4));
 }
 async function must(result, message) {
   if (result.error) throw new Error(message + ": " + result.error.message);
@@ -219,15 +215,13 @@ async function finish(job, target, publication) {
   });
 }
 async function fail(job, target, error) {
-  const code = error.code || "PUBLISH_ERROR";
-  const ambiguous = Boolean(error.ambiguous);
-  const retryable = Boolean(error.retryable) && !ambiguous;
-  const terminal = ambiguous || !retryable || job.attempt_count >= job.max_attempts;
+  const policy = classifyPublishFailure(error, job.attempt_count, job.max_attempts);
+  const { code, ambiguous, retryable, terminal } = policy;
   const status = terminal ? "dead_letter" : "retry";
   const now = new Date().toISOString();
   const message = safeMessage(error);
   await must(await db.from("publish_jobs").update({
-    status, available_at: new Date(Date.now() + (terminal ? 0 : retryDelay(job, error))).toISOString(),
+    status, available_at: new Date(Date.now() + (terminal ? 0 : computeRetryDelay({ attemptCount: job.attempt_count, retryAfterMs: error?.retryAfterMs }))).toISOString(),
     locked_at: null, locked_by: null, completed_at: terminal ? now : null,
     last_error_code: ambiguous ? "PUBLISH_OUTCOME_UNKNOWN" : code,
     last_error_message: ambiguous ? "Provider outcome is uncertain. Manual reconciliation is required before retry." : message
