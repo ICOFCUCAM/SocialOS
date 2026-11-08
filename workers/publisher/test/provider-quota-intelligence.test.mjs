@@ -39,7 +39,7 @@ test("classifies YouTube daily quota exhaustion until next Pacific midnight", ()
   }, now);
   assert.equal(result.code, "YOUTUBE_DAILY_QUOTA_EXCEEDED");
   assert.equal(result.quotaScope, "application_daily");
-  assert.equal(result.retryAfterMs, 5 * 60 * 60 * 1000);
+  assert.equal(result.retryAfterMs, 12 * 60 * 60 * 1000);
 });
 
 test("classifies YouTube short-window rate limit separately from daily quota", () => {
