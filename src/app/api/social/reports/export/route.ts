@@ -4,10 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const isoDate = (value: string | null) => Boolean(value && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + "T00:00:00Z")));
+const isoDate = (value: string | null) => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + "T00:00:00Z")));
 const csvCell = (value: unknown) => {
   let text = value === null || value === undefined ? "" : String(value);
-  if (/^[\\s\\u0000-\\u001f]*[=+@-]/.test(text)) text = "'" + text;
+  if (/^[\s\u0000-\u001f]*[=+@-]/.test(text)) text = "'" + text;
   return '"' + text.replace(/"/g, '""') + '"';
 };
 
