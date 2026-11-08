@@ -26,7 +26,11 @@ export async function POST(request: NextRequest) {
   if (authError || !user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
   let body: unknown;
-  try { body = await request.json(); } catch {
+  try {
+    const raw = await request.text();
+    if (raw.length > 16_000) return NextResponse.json({ error: "The content brief is too large." }, { status: 413 });
+    body = JSON.parse(raw);
+  } catch {
     return NextResponse.json({ error: "A valid JSON body is required." }, { status: 400 });
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
