@@ -90,9 +90,10 @@ export async function POST(request:NextRequest){
    if(processing?.derivatives&&!processing.derivatives.some(d=>d.profile===required&&d.objectKey))add("MEDIA_DERIVATIVE_MISSING","blocker","Required media rendition missing","A "+required+" rendition is not available for this destination.");
   }
   if(["instagram","youtube"].includes(code)&&assetRows.length===0)add("PLATFORM_MEDIA_REQUIRED","blocker","Media required","This destination requires a media asset.");
-  if(code==="linkedin"&&assetRows.length>0)add("LINKEDIN_MEDIA_UNSUPPORTED","warning","LinkedIn media support needs verification","The currently registered LinkedIn adapter declares text-only media capability.");
+  if(code==="linkedin"&&assetRows.length>0)add("LINKEDIN_MEDIA_UNSUPPORTED","blocker","Media is not supported by the current LinkedIn adapter","The currently registered LinkedIn adapter rejects media attachments; remove media or use a supported destination.");
   if(!post.scheduled_at&&!target.scheduled_at)add("NOT_SCHEDULED","info","Not scheduled","This post has no scheduled delivery time.");
-  if(post.scheduled_at&&Date.parse(post.scheduled_at)<=now)add("SCHEDULE_IN_PAST","blocker","Scheduled time is no longer in the future","Reschedule this post before publishing.");
+  const deliveryAt=target.scheduled_at||post.scheduled_at;
+  if(deliveryAt&&Date.parse(deliveryAt)<=now)add("SCHEDULE_IN_PAST","blocker","Scheduled time is no longer in the future","Reschedule this post before publishing.");
   findings.push(...accountFindings);
   return {targetId:target.id,accountId:account.id,accountName:account.account_name,platform:code,status:accountFindings.some(f=>f.severity==="blocker")?"blocked":accountFindings.some(f=>f.severity==="warning")?"review":"ready",findings:accountFindings};
  }));
