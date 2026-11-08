@@ -240,7 +240,7 @@ async function fail(job, target, error) {
   await refreshPostStatus(target.post_id, job.organization_id);
   if (terminal) {
     await db.from("social_accounts").update({
-      ...(code === "REAUTHORIZATION_REQUIRED" || code === "MISSING_PUBLISH_SCOPES" ? { connection_status: "reauthorization_required" } : {}),
+      ...(code === "REAUTHORIZATION_REQUIRED" || code === "MISSING_PUBLISH_SCOPES" || code === "AUTHORIZATION_REVOKED" || code === "PROVIDER_PERMISSION_DENIED" ? { connection_status: "reauthorization_required" } : {}),
       last_error: message
     }).eq("id", target.social_account_id);
   }
