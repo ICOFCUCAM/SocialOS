@@ -15,11 +15,11 @@ const field="mt-2 w-full rounded-xl border border-[#dfe7e0] bg-white px-4 py-3 t
 const area=field+" min-h-24 resize-y leading-6";
 const split=(value:string)=>[...new Set(value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean))].slice(0,20);
 
-export function CampaignForm({organizationId,brandId,initial,mode="create"}:{
- organizationId:string;brandId:string;initial?:Campaign;mode?:"create"|"edit";
+export function CampaignForm({organizationId,brandId,initial,mode="create",brandOptions=[]}:{
+ organizationId:string;brandId:string;initial?:Campaign;mode?:"create"|"edit";brandOptions?:{id:string;name:string}[];
 }){
  const router=useRouter();
- const [name,setName]=useState(initial?.name??"");
+ const [selectedBrandId,setSelectedBrandId]=useState(brandId);\n const [name,setName]=useState(initial?.name??"");
  const [description,setDescription]=useState(initial?.description??"");
  const [objective,setObjective]=useState(initial?.objective??"");
  const [audience,setAudience]=useState(initial?.target_audience??"");
@@ -41,7 +41,7 @@ export function CampaignForm({organizationId,brandId,initial,mode="create"}:{
   const successMetrics=metrics.split(/\r?\n/).map(line=>line.split("|").map(x=>x.trim())).filter(parts=>parts[0]).slice(0,10).map(parts=>({name:parts[0],target:parts[1]??"",unit:parts[2]??""}));
   setBusy(true);
   try{
-   const payload={organizationId,brandId,name,description,objective,targetAudience:audience,keyMessage:message,callToAction:cta,contentPillars:split(pillars),channels,startDate,endDate,status,successMetrics};
+   const payload={organizationId,brandId:selectedBrandId,name,description,objective,targetAudience:audience,keyMessage:message,callToAction:cta,contentPillars:split(pillars),channels,startDate,endDate,status,successMetrics};
    const url=mode==="create"?"/api/social/campaigns":"/api/social/campaigns/"+initial?.id;
    const response=await fetch(url,{method:mode==="create"?"POST":"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
    const data=await response.json();
@@ -54,7 +54,7 @@ export function CampaignForm({organizationId,brandId,initial,mode="create"}:{
  return <div className="space-y-6">
   <section className="rounded-2xl border border-[#e6ece6] bg-white p-5 sm:p-7">
    <div><h2 className="text-sm font-semibold">Campaign overview</h2><p className="mt-1 text-xs text-[#89958d]">Define what the campaign should achieve and the audience it serves.</p></div>
-   <label className="mt-5 block text-xs font-semibold text-[#53665a]">Campaign name</label><input value={name} onChange={e=>setName(e.target.value)} maxLength={160} placeholder="e.g. Spring product launch" className={field}/>
+   {mode==="create"&&brandOptions.length>1&&<><label className="mt-5 block text-xs font-semibold text-[#53665a]">Brand</label><select value={selectedBrandId} onChange={e=>setSelectedBrandId(e.target.value)} className={field}>{brandOptions.map(brand=><option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></>}\n   <label className="mt-5 block text-xs font-semibold text-[#53665a]">Campaign name</label><input value={name} onChange={e=>setName(e.target.value)} maxLength={160} placeholder="e.g. Spring product launch" className={field}/>
    <label className="mt-5 block text-xs font-semibold text-[#53665a]">Description</label><textarea value={description} onChange={e=>setDescription(e.target.value)} maxLength={3000} rows={3} placeholder="A short internal overview of the campaign…" className={area}/>
    <label className="mt-5 block text-xs font-semibold text-[#53665a]">Primary objective</label><textarea value={objective} onChange={e=>setObjective(e.target.value)} maxLength={1600} rows={3} placeholder="What measurable change should this campaign create?" className={area}/>
    <label className="mt-5 block text-xs font-semibold text-[#53665a]">Target audience</label><textarea value={audience} onChange={e=>setAudience(e.target.value)} maxLength={1200} rows={3} placeholder="Who are you trying to reach? Include needs, interests and context." className={area}/>
