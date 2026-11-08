@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { createDecipheriv } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { publishTarget } from "./providers/index.mjs";
 import { PublishError } from "./errors.mjs";
 
@@ -14,7 +14,16 @@ const signedUrlSeconds = Math.max(60, Math.min(900, Number(process.env.PUBLISH_M
 const maxVideoBytes = Math.max(1, Number(process.env.PUBLISH_MAX_VIDEO_BYTES) || 250 * 1024 * 1024);
 let stopping = false;
 
-function decryptStoredToken(nonce, ciphertext, tag) {\n  const raw = process.env.SOCIAL_TOKEN_ENCRYPTION_KEY;\n  if (!raw) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");\n  const encryptionKey = Buffer.from(raw, "base64");\n  if (encryptionKey.length !== 32) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY must decode to 32 bytes.");\n  const decipher = createDecipheriv("aes-256-gcm", encryptionKey, nonce);\n  decipher.setAuthTag(tag);\n  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");\n}\nfunction pgBytea(value) {
+function decryptStoredToken(nonce, ciphertext, tag) {
+  const raw = process.env.SOCIAL_TOKEN_ENCRYPTION_KEY;
+  if (!raw) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");
+  const encryptionKey = Buffer.from(raw, "base64");
+  if (encryptionKey.length !== 32) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY must decode to 32 bytes.");
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey, nonce);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+}
+function pgBytea(value) {
   if (Buffer.isBuffer(value)) return value;
   if (typeof value !== "string") throw new Error("Encrypted token field is missing.");
   const hex = value.startsWith("\\x") ? value.slice(2) : value;
@@ -50,8 +59,7 @@ function encryptionKey() {
   return value;
 }
 function encryptStoredToken(token) {
-  const nonce = randomUUID().replaceAll("-", "").slice(0, 24);
-  const iv = Buffer.from(nonce, "hex");
+  const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
   const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
   return { nonce: iv, ciphertext, tag: cipher.getAuthTag() };
@@ -293,7 +301,8 @@ async function handleJob(job) {
     else {
       await db.from("publish_jobs").update({ status: "dead_letter", locked_at: null, locked_by: null, completed_at: new Date().toISOString(), last_error_code: "TARGET_LOOKUP_FAILED", last_error_message: safeMessage(error) }).eq("id", job.id);
     }
-    process.stderr.write(JSON.stringify({ event: "publish_failed", jobId: job.id, code: error.code || "PUBLISH_ERROR", ambiguous: Boolean(error.ambiguous) }) + "\n");
+    process.stderr.write(JSON.stringify({ event: "publish_failed", jobId: job.id, code: error.code || "PUBLISH_ERROR", ambiguous: Boolean(error.ambiguous) }) + "
+");
   }
 }
 async function poll() {
@@ -309,6 +318,7 @@ process.on("SIGINT", () => { stopping = true; });
 console.log(JSON.stringify({ event: "publisher_started", workerId }));
 while (!stopping) {
   try { if ((await poll()) === 0) await new Promise(resolve => setTimeout(resolve, pollMs)); }
-  catch (error) { process.stderr.write(String(error.message || error) + "\n"); await new Promise(resolve => setTimeout(resolve, 5000)); }
+  catch (error) { process.stderr.write(String(error.message || error) + "
+"); await new Promise(resolve => setTimeout(resolve, 5000)); }
 }
 console.log(JSON.stringify({ event: "publisher_stopped", workerId }));
