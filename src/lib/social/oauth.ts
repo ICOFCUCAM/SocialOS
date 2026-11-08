@@ -20,14 +20,14 @@ export function getProvider(provider: string): ProviderConfig | null {
     if (!clientId || !clientSecret) return null;
     return {clientId,clientSecret,authorizeUrl:"https://accounts.google.com/o/oauth2/v2/auth",
       tokenUrl:"https://oauth2.googleapis.com/token",profileUrl:"https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
-      scopes:["openid","https://www.googleapis.com/auth/youtube.readonly"],name:"YouTube",platformCode:"youtube"};
+      scopes:["openid","https://www.googleapis.com/auth/youtube.upload"],name:"YouTube",platformCode:"youtube"};
   }
   if (provider === "linkedin") {
     const clientId=process.env.LINKEDIN_CLIENT_ID, clientSecret=process.env.LINKEDIN_CLIENT_SECRET;
     if (!clientId || !clientSecret) return null;
     return {clientId,clientSecret,authorizeUrl:"https://www.linkedin.com/oauth/v2/authorization",
       tokenUrl:"https://www.linkedin.com/oauth/v2/accessToken",profileUrl:"https://api.linkedin.com/v2/userinfo",
-      scopes:["openid","profile"],name:"LinkedIn",platformCode:"linkedin"};
+      scopes:["openid","profile","w_member_social"],name:"LinkedIn",platformCode:"linkedin"};
   }
   return null;
 }
