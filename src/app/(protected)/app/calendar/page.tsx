@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft, ArrowRight, CalendarDays, Plus } from "lucide-react";
+import { PublishReadinessCheck } from "@/components/app/publish-readiness-check";
 
 type Post={id:string;title:string|null;body:string;status:string;scheduled_at:string|null;published_at:string|null;created_at:string;brand_id:string};
 function monthLabel(date:Date){return new Intl.DateTimeFormat(undefined,{month:"long",year:"numeric"}).format(date);}
