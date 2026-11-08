@@ -10,19 +10,25 @@ export async function GET(request: NextRequest) {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!uuid.test(organizationId)) return NextResponse.json({ error: "A valid organizationId is required." }, { status: 400 });
 
-  const [summary, events] = await Promise.all([
+  const [summary, events, jobs] = await Promise.all([
     supabase.rpc("get_publishing_operations_summary", { p_organization_id: organizationId }),
     supabase.from("publish_job_events")
       .select("id,job_id,target_id,event_type,attempt_number,error_code,message,metadata,created_at")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: false })
       .limit(50),
+    supabase.from("publish_jobs")
+      .select("id,post_id,target_id,status,attempt_count,max_attempts,available_at,last_error_code,last_error_message,created_at,updated_at")
+      .eq("organization_id", organizationId)
+      .in("status", ["queued","running","retry","dead_letter"])
+      .order("updated_at", { ascending: false })
+      .limit(100),
   ]);
-  if (summary.error || events.error) {
-    const forbidden = [summary.error?.code, events.error?.code].includes("42501");
+  if (summary.error || events.error || jobs.error) {
+    const forbidden = [summary.error?.code, events.error?.code, jobs.error?.code].includes("42501");
     return NextResponse.json({ error: "Publishing operations could not be loaded." }, { status: forbidden ? 403 : 400 });
   }
-  return NextResponse.json({ summary: summary.data?.[0] ?? null, events: events.data ?? [] });
+  return NextResponse.json({ summary: summary.data?.[0] ?? null, events: events.data ?? [], jobs: jobs.data ?? [] });
 }
 
 export async function POST(request: NextRequest) {
