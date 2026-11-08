@@ -125,7 +125,7 @@ declare
   v_user_id uuid := auth.uid();
   v_org_id uuid := (p_payload->>'organization_id')::uuid;
   v_brand_id uuid := (p_payload->>'brand_id')::uuid;
-  v_post_id uuid;
+  v_post_id uuid := gen_random_uuid();
   v_version_id uuid;
   v_item jsonb;
   v_asset_id uuid;
@@ -133,9 +133,21 @@ declare
   v_position integer;
   v_body text;
   v_options jsonb;
+  v_role text;
+  v_scheduled_at timestamptz := nullif(p_payload->>'scheduled_at','')::timestamptz;
 begin
   if v_user_id is null then
     raise exception 'Authentication required' using errcode='42501';
+  end if;
+  if p_payload is null or jsonb_typeof(p_payload)<>'object' then
+    raise exception 'A post payload object is required' using errcode='22023';
+  end if;
+  if length(coalesce(p_payload->>'body',''))>20000
+     or length(coalesce(p_payload->>'title',''))>200 then
+    raise exception 'Post title or body exceeds supported length' using errcode='22023';
+  end if;
+  if v_scheduled_at is not null and v_scheduled_at<=now() then
+    raise exception 'Scheduled time must be in the future' using errcode='22023';
   end if;
   if jsonb_typeof(coalesce(p_payload->'account_versions','[]'::jsonb)) <> 'array' then
     raise exception 'Account versions must be an array' using errcode='22023';
@@ -187,7 +199,9 @@ begin
 
   -- Validate and attach shared media, and create one target/job per selected
   -- account using the same checks as the original bundle RPC.
-  if jsonb_array_length(coalesce(p_payload->'target_account_ids','[]'::jsonb)) < 1
+  if jsonb_typeof(coalesce(p_payload->'target_account_ids','[]'::jsonb))<>'array'
+     or jsonb_typeof(coalesce(p_payload->'asset_ids','[]'::jsonb))<>'array'
+     or jsonb_array_length(coalesce(p_payload->'target_account_ids','[]'::jsonb)) < 1
      or jsonb_array_length(coalesce(p_payload->'target_account_ids','[]'::jsonb)) > 20
      or jsonb_array_length(coalesce(p_payload->'asset_ids','[]'::jsonb)) > 20 then
     raise exception 'Invalid destination or media count' using errcode='22023';
