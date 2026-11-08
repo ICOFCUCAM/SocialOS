@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { CalendarClock, CheckCircle2, FileImage, Loader2, Send, UploadCloud, X } from "lucide-react";
+import { CalendarClock, CheckCircle2, FileImage, Loader2, Send, UploadCloud } from "lucide-react";
 
 type Brand={id:string;name:string};
 type Account={id:string;brand_id:string;account_name:string;connection_status:string;platform:{code:string;name:string}|null};
