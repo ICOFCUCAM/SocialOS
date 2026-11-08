@@ -183,6 +183,6 @@ begin
     'publish_job',v_job.id,jsonb_build_object('target_id',v_job.target_id,
     'external_post_id',trim(p_external_post_id)));
 end;
-$;
+$$;
 revoke all on function public.operator_reconcile_publish_job(uuid,text,text) from public,anon;
 grant execute on function public.operator_reconcile_publish_job(uuid,text,text) to authenticated;
