@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { randomUUID, createHash } from "node:crypto";
 import { scanFile } from "./scanner.mjs";
+import { resolveRenditionProfiles, IMAGE_PROFILES, VIDEO_PROFILES } from "./rendition-profiles.mjs";
 
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -74,6 +75,9 @@ async function processAsset(job) {
     await writeFile(input, bytes, { flag: "wx", mode: 0o600 });
     // No parser/decoder is allowed to touch customer media until ClamAV reports clean.
     await scanFile(input);
+    const targets = Array.isArray(asset.metadata?.targetPlatforms) && asset.metadata.targetPlatforms.length
+      ? asset.metadata.targetPlatforms : ["instagram", "facebook", "youtube", "linkedin", "pinterest"];
+    const profiles = resolveRenditionProfiles(targets);
     let result;
     if (detected.startsWith("image/")) {
       const meta = await sharp(input, { limitInputPixels: maxPixels, failOn: "error" }).metadata();
@@ -83,8 +87,17 @@ async function processAsset(job) {
       await sharp(input, { limitInputPixels: maxPixels, failOn: "error" }).rotate()
         .resize({ width: 2400, height: 2400, fit: "inside", withoutEnlargement: true })
         .webp({ quality: 84 }).toFile(preview);
-      const derivative = await put(asset.organization_id + "/" + asset.brand_id + "/" + asset.id + "/preview.webp", preview, "image/webp");
-      result = { kind: "image", width: meta.width, height: meta.height, derivatives: [derivative] };
+      const derivatives = [await put(asset.organization_id + "/" + asset.brand_id + "/" + asset.id + "/preview.webp", preview, "image/webp")];
+      for (const profileName of profiles.image) {
+        const profile = IMAGE_PROFILES[profileName];
+        const output = path.join(dir, "image-" + profileName + ".webp");
+        await sharp(input, { limitInputPixels: maxPixels, failOn: "error" }).rotate()
+          .resize(profile.width, profile.height, { fit: "contain", background: "#ffffff", withoutEnlargement: true })
+          .webp({ quality: profile.quality }).toFile(output);
+        const uploaded = await put(asset.organization_id + "/" + asset.brand_id + "/" + asset.id + "/renditions/" + profileName + ".webp", output, "image/webp");
+        derivatives.push({ ...uploaded, profile: profileName, width: profile.width, height: profile.height });
+      }
+      result = { kind: "image", width: meta.width, height: meta.height, targetPlatforms: profiles.platforms, derivatives };
     } else {
       const raw = await command("ffprobe", ["-v","error","-show_entries","format=duration:stream=codec_type,width,height,duration","-of","json",input], 30000);
       const probe = JSON.parse(raw.toString());
@@ -96,24 +109,31 @@ async function processAsset(job) {
       await command("ffmpeg", ["-nostdin","-v","error","-i",input,"-ss","1","-frames:v","1","-vf","scale=1280:-2","-q:v","3","-y",poster], 60000);
       const posterDerivative = await put(asset.organization_id + "/" + asset.brand_id + "/" + asset.id + "/poster.jpg", poster, "image/jpeg");
 
-      // Create a broadly compatible H.264/AAC mezzanine for downstream platform adapters.
-      const mezzanine = path.join(dir, "mezzanine.mp4");
-      await command("ffmpeg", [
-        "-nostdin","-v","error","-i",input,
-        "-map","0:v:0","-map","0:a:0?",
-        "-vf","scale='min(1920,iw)':-2",
-        "-c:v","libx264","-preset","veryfast","-crf","23","-pix_fmt","yuv420p",
-        "-c:a","aac","-b:a","128k","-movflags","+faststart","-f","mp4","-y",mezzanine
-      ], 15 * 60 * 1000);
-      const mezzanineInfo = await stat(mezzanine);
-      if (!mezzanineInfo.size || mezzanineInfo.size > maxBytes) {
-        throw Object.assign(new Error("Transcoded video exceeds the derivative size limit"), { code: "DERIVATIVE_SIZE_LIMIT" });
+      const derivatives = [posterDerivative];
+      for (const profileName of profiles.video) {
+        const profile = VIDEO_PROFILES[profileName];
+        const output = path.join(dir, "video-" + profileName + ".mp4");
+        const filter = "scale=" + profile.width + ":" + profile.height + ":force_original_aspect_ratio=decrease,pad=" +
+          profile.width + ":" + profile.height + ":(ow-iw)/2:(oh-ih)/2,setsar=1,fps=" + profile.fps;
+        await command("ffmpeg", [
+          "-nostdin","-v","error","-i",input,
+          "-map","0:v:0","-map","0:a:0?",
+          "-vf",filter,
+          "-c:v","libx264","-preset","veryfast","-b:v",profile.videoBitrate,
+          "-maxrate",profile.videoBitrate,"-bufsize",String(parseInt(profile.videoBitrate, 10) * 2) + "M",
+          "-pix_fmt","yuv420p","-c:a","aac","-b:a",profile.audioBitrate,
+          "-movflags","+faststart","-f","mp4","-y",output
+        ], 15 * 60 * 1000);
+        const info = await stat(output);
+        if (!info.size || info.size > maxBytes) {
+          throw Object.assign(new Error("Platform video rendition exceeds the derivative size limit: " + profileName), { code: "DERIVATIVE_SIZE_LIMIT" });
+        }
+        const uploaded = await put(asset.organization_id + "/" + asset.brand_id + "/" + asset.id + "/renditions/" + profileName + ".mp4", output, "video/mp4");
+        derivatives.push({ ...uploaded, profile: profileName, width: profile.width, height: profile.height, fps: profile.fps });
       }
-      const videoDerivative = await put(asset.organization_id + "/" + asset.brand_id + "/" + asset.id + "/mezzanine.mp4", mezzanine, "video/mp4");
       result = {
         kind: "video", width: stream.width, height: stream.height,
-        durationMs: Math.round(duration * 1000),
-        derivatives: [posterDerivative, videoDerivative]
+        durationMs: Math.round(duration * 1000), targetPlatforms: profiles.platforms, derivatives
       };
     }
     await update("social_media_assets", asset.id, {
