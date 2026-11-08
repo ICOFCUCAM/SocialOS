@@ -105,7 +105,7 @@ async function refreshPostStatus(postId, organizationId) {
   let status = "processing";
   if (published === statuses.length) status = "published";
   else if (terminal && published > 0) status = "partially_published";
-  else if (terminal && failed === statuses.length) status = "failed";
+  else if (terminal && published === 0 && failed + skipped > 0) status = "failed";
   else if (terminal && cancelled === statuses.length) status = "cancelled";
   await must(await db.from("social_posts").update({
     status,
