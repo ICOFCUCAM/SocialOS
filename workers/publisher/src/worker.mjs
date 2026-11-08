@@ -5,7 +5,7 @@ import { publishTarget } from "./providers/index.mjs";
 import { PublishError } from "./errors.mjs";
 import { computeRetryDelay, classifyPublishFailure } from "./retry-policy.mjs";
 import { resolveTargetContent } from "./content-version.mjs";
-import { waitForProviderCapacity, deferProviderCapacity } from "./provider-rate-limits.mjs";
+import { waitForProviderCapacity, deferProviderCapacity, closeProviderRateLimiter } from "./provider-rate-limits.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -329,4 +329,5 @@ while (!stopping) {
   try { if ((await poll()) === 0) await new Promise(resolve => setTimeout(resolve, pollMs)); }
   catch (error) { process.stderr.write(String(error.message || error) + "\n"); await new Promise(resolve => setTimeout(resolve, 5000)); }
 }
+await closeProviderRateLimiter();
 console.log(JSON.stringify({ event: "publisher_stopped", workerId }));
