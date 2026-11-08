@@ -22,7 +22,15 @@ A scheduled, one-shot worker that imports provider-reported analytics into `soci
 - Existing Meta connections must reconnect to grant the additional analytics permissions.
 - Meta metric availability can vary by media type, account eligibility and API version. The collector stores only returned, numeric metrics.
 
-No unofficial scraping is used. LinkedIn remains deliberately skipped until its current analytics permissions, metric definitions and endpoints are implemented and verified.
+### LinkedIn member posts
+- Uses the official Community Management API `GET /rest/memberCreatorPostAnalytics?q=entity` finder for each published member post URN.
+- Requires the `r_member_postAnalytics` member-consent permission and approved Community Management API access. Existing LinkedIn connections must reconnect; the LinkedIn app must also have the required product access.
+- Requires an explicit `LINKEDIN_API_VERSION` in `YYYYMM` format; the worker never guesses a version.
+- Collects lifetime counts for impressions, members reached, reactions, comments and reshares. It also attempts optional saves, link clicks, followers gained and profile views from content.
+- Stores results as lifetime snapshots. Missing values remain null; unsupported optional metrics are omitted. Errors for core metrics fail the target rather than silently producing partial zeroes.
+- Requires provider post IDs to be LinkedIn `share` or `ugcPost` URNs.
+
+No unofficial scraping is used.
 
 ## Run
 
@@ -33,6 +41,8 @@ Required environment:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SOCIAL_TOKEN_ENCRYPTION_KEYS` or `SOCIAL_TOKEN_ENCRYPTION_KEY`
 - `SOCIAL_TOKEN_KEY_VERSION` when using a versioned key ring
+- `META_GRAPH_API_VERSION` for Meta collection
+- `LINKEDIN_API_VERSION` (YYYYMM) for LinkedIn collection
 
 Optional:
 - `ANALYTICS_MAX_TARGETS` (default 100, max 500)
