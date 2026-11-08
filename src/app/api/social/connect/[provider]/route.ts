@@ -4,7 +4,7 @@ import { createOAuthState, createPkceChallenge, createPkceVerifier, getProvider,
 
 export async function GET(request:NextRequest,{params}:{params:Promise<{provider:string}>}) {
   const {provider:providerName}=await params;
-  if (!["youtube","linkedin"].includes(providerName)) return NextResponse.json({error:"This provider is not enabled in the OAuth foundation."},{status:404});
+  if (!["youtube","linkedin","meta"].includes(providerName)) return NextResponse.json({error:"This provider is not enabled in the OAuth foundation."},{status:404});
   const provider=getProvider(providerName);
   if (!provider) return NextResponse.json({error:"Provider credentials are not configured."},{status:503});
   const supabase=await createClient();
