@@ -1,5 +1,5 @@
 export class PublishError extends Error {
-  constructor(message, { code = "PUBLISH_FAILED", retryable = false, retryAfterMs = null, ambiguous = false, status = null, quotaScope = null, usage = null } = {}) {
+  constructor(message, { code = "PUBLISH_FAILED", retryable = false, retryAfterMs = null, ambiguous = false, status = null, quotaScope = null, usage = null, businessId = null } = {}) {
     super(message);
     this.name = "PublishError";
     this.code = code;
@@ -9,6 +9,7 @@ export class PublishError extends Error {
     this.status = status;
     this.quotaScope = quotaScope;
     this.usage = usage;
+    this.businessId = businessId;
   }
 }
 
