@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createSocialAdminClient } from "@/lib/social/admin";
-import { encryptToken, getProvider, oauthRedirectUri, verifyOAuthState, type Provider } from "@/lib/social/oauth";
+import { encryptToken, getProvider, oauthRedirectUri, toPgBytea, verifyOAuthState, type Provider } from "@/lib/social/oauth";
 
 type TokenResponse={access_token?:string;refresh_token?:string;expires_in?:number;scope?:string;token_type?:string;error?:string};
 type Profile={id?:string;sub?:string;name?:string;picture?:string};
 function returnToApp(request:NextRequest,status:string) {
-  const url=new URL("/app/channels",request.url);url.searchParams.set("connection",status);
+  const base=process.env.SOCIAL_OAUTH_REDIRECT_BASE_URL;
+  if (!base) throw new Error("SOCIAL_OAUTH_REDIRECT_BASE_URL is not configured.");
+  const url=new URL("/app/channels",base);url.searchParams.set("connection",status);
   const response=NextResponse.redirect(url);return response;
 }
 export async function GET(request:NextRequest) {
@@ -30,7 +32,7 @@ export async function GET(request:NextRequest) {
   if (!user || user.id!==signed.userId) return clear(returnToApp(request,"session_expired"));
   const {data:member}=await supabase.from("organization_members").select("organization_id,role")
     .eq("user_id",user.id).eq("organization_id",signed.organizationId).eq("status","active").maybeSingle();
-  if (!member) return clear(returnToApp(request,"membership_changed"));
+  if (!member || !["owner","administrator","manager"].includes(member.role)) return clear(returnToApp(request,"membership_changed"));
   const {data:brand}=await supabase.from("brands").select("id")
     .eq("id",signed.brandId).eq("organization_id",signed.organizationId).eq("is_active",true).maybeSingle();
   if (!brand) return clear(returnToApp(request,"brand_unavailable"));
@@ -72,13 +74,16 @@ export async function GET(request:NextRequest) {
     const refresh=tokens.refresh_token?encryptToken(tokens.refresh_token):null;
     const {error:tokenError}=await admin.from("social_account_tokens").upsert({
       organization_id:signed.organizationId,social_account_id:account.id,
-      access_token_nonce:access.nonce,access_token_ciphertext:access.ciphertext,access_token_tag:access.tag,
-      refresh_token_nonce:refresh?.nonce??null,refresh_token_ciphertext:refresh?.ciphertext??null,refresh_token_tag:refresh?.tag??null,
+      access_token_nonce:toPgBytea(access.nonce),access_token_ciphertext:toPgBytea(access.ciphertext),access_token_tag:toPgBytea(access.tag),
+      refresh_token_nonce:refresh?toPgBytea(refresh.nonce):null,refresh_token_ciphertext:refresh?toPgBytea(refresh.ciphertext):null,refresh_token_tag:refresh?toPgBytea(refresh.tag):null,
       encryption_algorithm:access.algorithm,encryption_key_version:access.keyVersion,
       access_token_expires_at:tokens.expires_in?new Date(Date.now()+tokens.expires_in*1000).toISOString():null,
       token_type:"Bearer"
     },{onConflict:"social_account_id"});
-    if (tokenError) throw new Error("Unable to securely store provider credentials.");
+    if (tokenError) {
+      await admin.from("social_accounts").update({connection_status:"error",last_error:"Secure token storage failed."}).eq("id",account.id);
+      throw new Error("Unable to securely store provider credentials.");
+    }
     return clear(returnToApp(request,"connected"));
   } catch {
     return clear(returnToApp(request,"connection_failed"));
