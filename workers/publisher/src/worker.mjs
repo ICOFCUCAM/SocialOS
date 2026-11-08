@@ -103,16 +103,14 @@ async function refreshProviderToken(account, row) {
         { code: invalidGrant ? "REAUTHORIZATION_REQUIRED" : "TOKEN_REFRESH_FAILED", retryable: !invalidGrant && (response.status === 429 || response.status >= 500), retryAfterMs: Number(response.headers.get("retry-after")) * 1000 || null });
     }
     const access = encryptStoredToken(result.access_token);
-    const rotatedRefresh = result.refresh_token ? encryptStoredToken(result.refresh_token) : null;
+    const rotatedRefresh = encryptStoredToken(result.refresh_token || refreshToken);
     const updated = await db.from("social_account_tokens").update({
       access_token_nonce: "\\x" + access.nonce.toString("hex"),
       access_token_ciphertext: "\\x" + access.ciphertext.toString("hex"),
       access_token_tag: "\\x" + access.tag.toString("hex"),
-      ...(rotatedRefresh ? {
-        refresh_token_nonce: "\\x" + rotatedRefresh.nonce.toString("hex"),
-        refresh_token_ciphertext: "\\x" + rotatedRefresh.ciphertext.toString("hex"),
-        refresh_token_tag: "\\x" + rotatedRefresh.tag.toString("hex")
-      } : {}),
+      refresh_token_nonce: "\\x" + rotatedRefresh.nonce.toString("hex"),
+      refresh_token_ciphertext: "\\x" + rotatedRefresh.ciphertext.toString("hex"),
+      refresh_token_tag: "\\x" + rotatedRefresh.tag.toString("hex"),
       access_token_expires_at: result.expires_in ? new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() : null,
       refresh_token_expires_at: result.refresh_token_expires_in ? new Date(Date.now() + Number(result.refresh_token_expires_in) * 1000).toISOString() : current.refresh_token_expires_at,
       encryption_key_version: access.keyVersion,
