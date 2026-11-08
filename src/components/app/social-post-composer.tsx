@@ -121,7 +121,7 @@ export function SocialPostComposer({organizationId,brands,accounts,assets:initia
         {error&&<p role="alert" className="mt-3 rounded-lg bg-[#fbefed] px-3 py-2 text-xs leading-5 text-[#9a4b3d]">{error}</p>}
         {message&&<p role="status" className="mt-3 rounded-lg bg-[#edf5ef] px-3 py-2 text-xs leading-5 text-[#176b4b]">{message}</p>}
       </section>
-      <p className="px-1 text-[10px] leading-5 text-[#9aa49d]">Publishing availability and media formats depend on each platform's approved API capabilities. Saving or scheduling a post does not guarantee provider acceptance.</p>
+      <p className="px-1 text-[10px] leading-5 text-[#9aa49d]">Publishing availability and media formats depend on each platform&apos;s approved API capabilities. Saving or scheduling a post does not guarantee provider acceptance.</p>
     </aside>
   </div>;
 }
