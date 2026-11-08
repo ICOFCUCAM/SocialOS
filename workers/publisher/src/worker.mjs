@@ -177,6 +177,8 @@ async function handleJob(job) {
   }
 }
 async function poll() {
+  const { error: recoveryError } = await db.rpc("recover_stale_publish_jobs", { p_lease_minutes: 15 });
+  if (recoveryError) throw recoveryError;
   const { data, error } = await db.rpc("claim_publish_jobs", { p_worker_id: workerId, p_limit: 1 });
   if (error) throw error;
   for (const job of data || []) await handleJob(job);
