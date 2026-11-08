@@ -289,8 +289,7 @@ async function handleJob(job) {
     else {
       await db.from("publish_jobs").update({ status: "dead_letter", locked_at: null, locked_by: null, completed_at: new Date().toISOString(), last_error_code: "TARGET_LOOKUP_FAILED", last_error_message: safeMessage(error) }).eq("id", job.id);
     }
-    process.stderr.write(JSON.stringify({ event: "publish_failed", jobId: job.id, code: error.code || "PUBLISH_ERROR", ambiguous: Boolean(error.ambiguous) }) + "
-");
+    process.stderr.write(JSON.stringify({ event: "publish_failed", jobId: job.id, code: error.code || "PUBLISH_ERROR", ambiguous: Boolean(error.ambiguous) }) + "\n");
   }
 }
 async function poll() {
@@ -306,7 +305,6 @@ process.on("SIGINT", () => { stopping = true; });
 console.log(JSON.stringify({ event: "publisher_started", workerId }));
 while (!stopping) {
   try { if ((await poll()) === 0) await new Promise(resolve => setTimeout(resolve, pollMs)); }
-  catch (error) { process.stderr.write(String(error.message || error) + "
-"); await new Promise(resolve => setTimeout(resolve, 5000)); }
+  catch (error) { process.stderr.write(String(error.message || error) + "\n"); await new Promise(resolve => setTimeout(resolve, 5000)); }
 }
 console.log(JSON.stringify({ event: "publisher_stopped", workerId }));
