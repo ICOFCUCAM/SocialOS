@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { createDecipheriv } from "node:crypto";
+import { collectMetaInsights } from "./meta-insights.mjs";
 
 const required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
 for (const name of required) if (!process.env[name]) throw new Error(name + " is required.");
@@ -74,8 +75,8 @@ async function queryYouTubeAnalytics(token, videoId, startDate, endDate) {
   return (payload.rows ?? []).map(values => Object.fromEntries(headers.map((name, index) => [name, values[index]])));
 }
 
-async function collectTarget(target, account, token) {
-  const endDate = daysAgo(3); // YouTube reporting data commonly has a 48–72 hour processing delay.
+async function collectYouTubeTarget(target, token) {
+  const endDate = daysAgo(3);
   const startDate = daysAgo(lookbackDays);
   const rows = await queryYouTubeAnalytics(token, target.platform_post_id, startDate, endDate);
   if (!rows.length) return 0;
@@ -93,17 +94,20 @@ async function collectTarget(target, account, token) {
       comments,
       shares,
       engagements: likes + comments + shares,
-      provider_metrics: {
-        provider: "youtube",
-        estimated_minutes_watched: Number(row.estimatedMinutesWatched ?? 0)
-      },
+      provider_metrics: { provider: "youtube", estimated_minutes_watched: Number(row.estimatedMinutesWatched ?? 0) },
       collected_at: new Date().toISOString()
     };
   });
-  const { error } = await db.from("social_post_analytics_daily").upsert(records, {
-    onConflict: "target_id,metric_date,period_type"
-  });
+  const { error } = await db.from("social_post_analytics_daily").upsert(records, { onConflict: "target_id,metric_date,period_type" });
   if (error) throw new Error("Unable to persist YouTube analytics: " + error.message);
+  return records.length;
+}
+
+async function persistMetaTarget(target, platformCode, token) {
+  const records = await collectMetaInsights(target, platformCode, token);
+  if (!records.length) return 0;
+  const { error } = await db.from("social_post_analytics_daily").upsert(records, { onConflict: "target_id,metric_date,period_type" });
+  if (error) throw new Error("Unable to persist Meta analytics: " + error.message);
   return records.length;
 }
 
@@ -126,10 +130,16 @@ async function main() {
       if (accountError || !account || account.connection_status !== "connected") { skipped++; continue; }
       const { data: platform, error: platformError } = await db.from("social_platforms")
         .select("code").eq("id", account.platform_id).single();
-      if (platformError || platform?.code !== "youtube") { skipped++; continue; }
-      if (!(account.granted_scopes ?? []).includes("https://www.googleapis.com/auth/youtube.readonly")) {
+      if (platformError || !["youtube", "facebook", "instagram"].includes(platform?.code)) { skipped++; continue; }
+      const scopes = account.granted_scopes ?? [];
+      const requiredScopes = platform.code === "youtube"
+        ? ["https://www.googleapis.com/auth/youtube.readonly"]
+        : platform.code === "instagram"
+          ? ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"]
+          : ["read_insights", "pages_read_engagement"];
+      if (!requiredScopes.every(scope => scopes.includes(scope))) {
         skipped++;
-        console.warn("Skipped account without YouTube analytics read permission:", account.id);
+        console.warn("Skipped account without required analytics permissions:", account.id, platform.code);
         continue;
       }
       const { data: tokenRow, error: tokenError } = await db.from("social_account_tokens")
@@ -141,7 +151,8 @@ async function main() {
         continue;
       }
       const token = decryptToken(tokenRow);
-      collected += await collectTarget(target, account, token);
+      if (platform.code === "youtube") collected += await collectYouTubeTarget(target, token);
+      else collected += await persistMetaTarget(target, platform.code, token);
     } catch (error) {
       failed++;
       console.error("Analytics collection failed for target", target.id, {
@@ -152,7 +163,7 @@ async function main() {
       if (error?.reauthorize) {
         await db.from("social_accounts").update({
           connection_status: "reauthorization_required",
-          last_error: "YouTube Analytics read permission is required."
+          last_error: "Provider analytics permission is unavailable; reconnect the account."
         }).eq("id", target.social_account_id).eq("organization_id", target.organization_id);
       }
     }
