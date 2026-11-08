@@ -1,18 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowUpRight, CheckCircle2, CircleAlert, Facebook, Instagram, Linkedin, Plus, Youtube } from "lucide-react";
-import { IconBrandPinterest, IconBrandThreads, IconBrandTiktok, IconBrandX } from "@tabler/icons-react";
+import { AtSign, BriefcaseBusiness, CheckCircle2, CircleAlert, Facebook, Globe2, Instagram, Linkedin, Pin, Video, Youtube } from "lucide-react";
 
 const providers = [
   {code:"instagram",name:"Instagram",group:"Meta",description:"Publish images, reels and supported media formats.",icon:Instagram,env:"META"},
   {code:"facebook",name:"Facebook Pages",group:"Meta",description:"Manage Page publishing and audience engagement.",icon:Facebook,env:"META"},
-  {code:"tiktok",name:"TikTok",group:"TikTok",description:"Connect TikTok accounts for supported publishing workflows.",icon:IconBrandTiktok,env:"TIKTOK"},
+  {code:"tiktok",name:"TikTok",group:"TikTok",description:"Connect TikTok accounts for supported publishing workflows.",icon:Video,env:"TIKTOK"},
   {code:"youtube",name:"YouTube",group:"Google",description:"Connect channels for video publishing and channel insights.",icon:Youtube,env:"GOOGLE"},
   {code:"linkedin",name:"LinkedIn",group:"LinkedIn",description:"Publish to eligible member or organisation profiles.",icon:Linkedin,env:"LINKEDIN"},
-  {code:"threads",name:"Threads",group:"Meta",description:"Connect Threads profiles for supported publishing.",icon:IconBrandThreads,env:"THREADS"},
-  {code:"pinterest",name:"Pinterest",group:"Pinterest",description:"Manage Pins and supported board workflows.",icon:IconBrandPinterest,env:"PINTEREST"},
-  {code:"x",name:"X",group:"X",description:"Connect accounts for supported posting and engagement.",icon:IconBrandX,env:"X"}
+  {code:"threads",name:"Threads",group:"Meta",description:"Connect Threads profiles for supported publishing.",icon:AtSign,env:"THREADS"},
+  {code:"pinterest",name:"Pinterest",group:"Pinterest",description:"Manage Pins and supported board workflows.",icon:Pin,env:"PINTEREST"},
+  {code:"x",name:"X",group:"X",description:"Connect accounts for supported posting and engagement.",icon:Globe2,env:"X"}
 ] as const;
 
 function configured(provider:string) {
