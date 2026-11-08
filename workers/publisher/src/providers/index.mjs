@@ -11,22 +11,22 @@ import { publishLinkedIn } from "./linkedin.mjs";
 const adapters = {
   facebook: Object.freeze({
     key: "facebook",
-    capabilities: Object.freeze({ text: true, image: true, video: true, maxMediaItems: 1 }),
+    capabilities: Object.freeze({ textOnly: true, caption: true, allowedMediaKinds: Object.freeze(["image", "video"]), requiresMedia: false, maxMediaItems: 1, maxTextLength: null }),
     publish: publishFacebookPage
   }),
   instagram: Object.freeze({
     key: "instagram",
-    capabilities: Object.freeze({ text: false, image: true, video: true, maxMediaItems: 1 }),
+    capabilities: Object.freeze({ textOnly: false, caption: true, allowedMediaKinds: Object.freeze(["image", "video"]), requiresMedia: true, maxMediaItems: 1, maxTextLength: null }),
     publish: publishInstagram
   }),
   youtube: Object.freeze({
     key: "youtube",
-    capabilities: Object.freeze({ text: false, image: false, video: true, maxMediaItems: 1 }),
+    capabilities: Object.freeze({ textOnly: false, caption: false, allowedMediaKinds: Object.freeze(["video"]), requiresMedia: true, maxMediaItems: 1, maxTextLength: null }),
     publish: publishYouTube
   }),
   linkedin: Object.freeze({
     key: "linkedin",
-    capabilities: Object.freeze({ text: true, image: false, video: false, maxMediaItems: 0 }),
+    capabilities: Object.freeze({ textOnly: true, caption: true, allowedMediaKinds: Object.freeze([]), requiresMedia: false, maxMediaItems: 0, maxTextLength: null }),
     publish: publishLinkedIn
   })
 };
@@ -46,6 +46,36 @@ export function getProviderAdapter(platform) {
     });
   }
   return adapter;
+}
+
+
+/**
+ * Enforce only capabilities verified by the currently implemented adapter.
+ * Provider-specific character limits remain null until verified against the
+ * applicable official API/version and account permissions.
+ */
+export function validateContentForProvider(platform, post, media = []) {
+  const adapter = getProviderAdapter(platform);
+  const caps = adapter.capabilities;
+  const body = typeof post?.body === "string" ? post.body : "";
+  if (caps.requiresMedia && media.length === 0) {
+    throw new PublishError("This destination requires media for the selected publishing format.", { code: "PLATFORM_MEDIA_REQUIRED" });
+  }
+  if (media.length > caps.maxMediaItems) {
+    throw new PublishError("The selected content contains more media items than this adapter supports.", { code: "PLATFORM_MEDIA_COUNT_EXCEEDED" });
+  }
+  if (body.length && !caps.caption && !caps.textOnly) {
+    throw new PublishError("This publishing format does not accept caption text.", { code: "PLATFORM_CAPTION_UNSUPPORTED" });
+  }
+  for (const item of media) {
+    if (!caps.allowedMediaKinds.includes(item.kind)) {
+      throw new PublishError("The selected media type is not supported by this destination adapter.", { code: "PLATFORM_MEDIA_TYPE_UNSUPPORTED" });
+    }
+  }
+  if (Number.isInteger(caps.maxTextLength) && body.length > caps.maxTextLength) {
+    throw new PublishError("The destination caption exceeds its supported text length.", { code: "PLATFORM_TEXT_LIMIT" });
+  }
+  return true;
 }
 
 function validatePublishInput(input) {
