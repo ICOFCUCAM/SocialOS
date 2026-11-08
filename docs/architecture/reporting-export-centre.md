@@ -12,11 +12,18 @@ The Reporting & Export Centre adds a workspace-authenticated CSV export for prov
 - Missing metric values remain blank. Provider metrics are not combined across platforms.
 - CSV cells are quoted and formula-leading content is neutralised to reduce spreadsheet formula injection risk.
 
+## Pagination and scale
+- Published destinations are fetched in deterministic 1,000-row PostgREST range pages ordered by destination ID.
+- Analytics are fetched in target-ID batches of 200 and 1,000-row range pages ordered by reporting date and target ID.
+- Account, post and platform metadata lookups are chunked to avoid oversized PostgREST `in` filters.
+- The interactive report and synchronous CSV export support up to 50,000 published destinations and 100,000 daily metric rows per request. Larger requests fail explicitly with HTTP 413 for CSV export; narrow the reporting period or scope until an asynchronous export job is introduced.
+- Pagination uses the authenticated Supabase client and retains workspace/brand RLS; it does not use service-role access.
+
 ## Security and limits
 - Requires an authenticated user and an active workspace membership.
 - Queries use the authenticated Supabase server client; row-level security remains in force for brand access.
 - The export does not use the service-role client or expose credentials.
-- Query limits cap the initial release at 5,000 published targets and 20,000 metric rows. Larger exports require a paginated/background export milestone.
+- Synchronous request caps are 50,000 published destinations and 100,000 metric rows; larger workspaces will need an asynchronous export job.
 - The route sends private, no-store responses.
 
 ## Not included
