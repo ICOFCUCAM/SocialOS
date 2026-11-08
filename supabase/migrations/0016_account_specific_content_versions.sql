@@ -135,9 +135,11 @@ begin
   if v_user_id is null then
     raise exception 'Authentication required' using errcode='42501';
   end if;
-  if jsonb_typeof(coalesce(p_payload->'account_versions','[]'::jsonb)) <> 'array'
-     or jsonb_array_length(coalesce(p_payload->'account_versions','[]'::jsonb)) > 20 then
-    raise exception 'Account versions must be an array of at most 20 items' using errcode='22023';
+  if jsonb_typeof(coalesce(p_payload->'account_versions','[]'::jsonb)) <> 'array' then
+    raise exception 'Account versions must be an array' using errcode='22023';
+  end if;
+  if jsonb_array_length(coalesce(p_payload->'account_versions','[]'::jsonb)) > 20 then
+    raise exception 'At most 20 account versions are allowed' using errcode='22023';
   end if;
 
   -- This function is called inside the same PostgreSQL transaction.
