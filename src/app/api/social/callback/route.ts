@@ -49,9 +49,18 @@ export async function GET(request:NextRequest) {
     let externalId="",accountName="",picture:string|undefined;
     if (providerName==="meta") {
       const graphVersion=process.env.META_GRAPH_API_VERSION??"v25.0";
+      const longLivedUrl=new URL(`https://graph.facebook.com/${graphVersion}/oauth/access_token`);
+      longLivedUrl.searchParams.set("grant_type","fb_exchange_token");
+      longLivedUrl.searchParams.set("client_id",provider.clientId);
+      longLivedUrl.searchParams.set("client_secret",provider.clientSecret);
+      longLivedUrl.searchParams.set("fb_exchange_token",tokens.access_token);
+      const longLivedResponse=await fetch(longLivedUrl,{cache:"no-store",signal:AbortSignal.timeout(15000)});
+      const longLived=await longLivedResponse.json() as TokenResponse;
+      if (!longLivedResponse.ok || !longLived.access_token) return clear(returnToApp(request,"meta_token_exchange_failed"));
+      const metaAccessToken=longLived.access_token;
       const pagesUrl=new URL(`https://graph.facebook.com/${graphVersion}/me/accounts`);
       pagesUrl.searchParams.set("fields","id,name,access_token,instagram_business_account{id,username,profile_picture_url}");
-      pagesUrl.searchParams.set("access_token",tokens.access_token);
+      pagesUrl.searchParams.set("access_token",metaAccessToken);
       const pagesResponse=await fetch(pagesUrl,{cache:"no-store",signal:AbortSignal.timeout(20000)});
       const pageData=await pagesResponse.json() as {data?:{id:string;name:string;access_token:string;instagram_business_account?:{id:string;username?:string;profile_picture_url?:string}}[];error?:{message?:string}};
       if (!pagesResponse.ok || !pageData.data) return clear(returnToApp(request,"meta_pages_unavailable"));
