@@ -70,6 +70,7 @@ export function encryptToken(token:string) {
   const ciphertext=Buffer.concat([cipher.update(token,"utf8"),cipher.final()]);
   return {nonce,ciphertext,tag:cipher.getAuthTag(),algorithm:"AES-256-GCM",keyVersion:process.env.SOCIAL_TOKEN_KEY_VERSION??"v1"};
 }
+export function toPgBytea(value:Buffer) { return `\\\\x${value.toString("hex")}`; }
 export function decryptToken(nonce:Buffer,ciphertext:Buffer,tag:Buffer) {
   const decipher=createDecipheriv("aes-256-gcm",encryptionKey(),nonce);
   decipher.setAuthTag(tag);
