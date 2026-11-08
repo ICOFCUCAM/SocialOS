@@ -294,7 +294,7 @@ async function handleJob(job) {
     await finish(job, target, { ...publication, platform: context.account.platform });
   } catch (error) {
     if (rateLimitScope && (error?.status === 429 || error?.code === "YOUTUBE_DAILY_QUOTA_EXCEEDED" || error?.code === "YOUTUBE_RATE_LIMIT_EXCEEDED" || error?.code === "LINKEDIN_QUOTA_EXCEEDED")) {
-      try { await deferProviderCapacity(rateLimitScope, error.retryAfterMs || 60000); }
+      try { await deferProviderCapacity({ ...rateLimitScope, businessId: error.businessId || null }, error.retryAfterMs || 60000); }
       catch (coordinationError) { process.stderr.write(JSON.stringify({ event: "provider_rate_limit_persist_failed", jobId: job.id, code: coordinationError.code || "RATE_LIMIT_COORDINATOR_UNAVAILABLE" }) + "\\n"); }
     }
     const lookup = await db.from("social_post_targets").select("*").eq("id", job.target_id).eq("organization_id", job.organization_id).maybeSingle();
