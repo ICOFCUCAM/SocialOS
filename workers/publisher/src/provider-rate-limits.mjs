@@ -54,6 +54,9 @@ export function createProviderRateLimiter({ redis, keyPrefix = "socialos:provide
 
 let redisClient = null;
 let limiter = null;
+if (process.env.NODE_ENV === "production" && !process.env.REDIS_URL) {
+  throw new Error("REDIS_URL is required in production for distributed provider rate-limit coordination.");
+}
 if (process.env.REDIS_URL) {
   redisClient = new Redis(process.env.REDIS_URL, {
     lazyConnect: true,
