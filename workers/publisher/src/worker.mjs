@@ -14,15 +14,6 @@ const signedUrlSeconds = Math.max(60, Math.min(900, Number(process.env.PUBLISH_M
 const maxVideoBytes = Math.max(1, Number(process.env.PUBLISH_MAX_VIDEO_BYTES) || 250 * 1024 * 1024);
 let stopping = false;
 
-function decryptStoredToken(nonce, ciphertext, tag) {
-  const raw = process.env.SOCIAL_TOKEN_ENCRYPTION_KEY;
-  if (!raw) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");
-  const encryptionKey = Buffer.from(raw, "base64");
-  if (encryptionKey.length !== 32) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY must decode to 32 bytes.");
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey, nonce);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-}
 function pgBytea(value) {
   if (Buffer.isBuffer(value)) return value;
   if (typeof value !== "string") throw new Error("Encrypted token field is missing.");
