@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   }
   if (result.error) {
     const forbidden = result.error.code === "42501";
-    return NextResponse.json({ error: forbidden ? "You do not have permission to perform this action." : result.error.message }, { status: forbidden ? 403 : 400 });
+    return NextResponse.json({ error: forbidden ? "You do not have permission to perform this action." : "The publishing operation could not be completed." }, { status: forbidden ? 403 : 400 });
   }
   return NextResponse.json({ success: true });
 }
