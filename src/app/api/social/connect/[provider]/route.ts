@@ -27,8 +27,10 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{provider
   url.searchParams.set("response_type","code");
   url.searchParams.set("scope",provider.scopes.join(" "));
   url.searchParams.set("state",state.nonce);
-  url.searchParams.set("code_challenge",createPkceChallenge(verifier));
-  url.searchParams.set("code_challenge_method","S256");
+  if (providerName!=="meta") {
+    url.searchParams.set("code_challenge",createPkceChallenge(verifier));
+    url.searchParams.set("code_challenge_method","S256");
+  }
   if (providerName==="youtube") {
     url.searchParams.set("access_type","offline");
     url.searchParams.set("prompt","consent");
