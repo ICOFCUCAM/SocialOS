@@ -188,10 +188,16 @@ async function handleJob(job) {
     });
     await finish(job, target, { ...publication, platform: context.account.platform });
   } catch (error) {
-    if (!target) {
-      const lookup = await db.from("social_post_targets").select("*").eq("id", job.target_id).eq("organization_id", job.organization_id).maybeSingle();
-      target = lookup.data;
+    const lookup = await db.from("social_post_targets").select("*").eq("id", job.target_id).eq("organization_id", job.organization_id).maybeSingle();
+    if (lookup.data?.platform_post_id) {
+      await db.from("publish_jobs").update({
+        status: "succeeded", locked_at: null, locked_by: null,
+        completed_at: new Date().toISOString(), last_error_code: null, last_error_message: null
+      }).eq("id", job.id);
+      await refreshPostStatus(lookup.data.post_id, job.organization_id);
+      return;
     }
+    target = lookup.data || target;
     if (target) await fail(job, target, error);
     else {
       await db.from("publish_jobs").update({ status: "dead_letter", locked_at: null, locked_by: null, completed_at: new Date().toISOString(), last_error_code: "TARGET_LOOKUP_FAILED", last_error_message: safeMessage(error) }).eq("id", job.id);
