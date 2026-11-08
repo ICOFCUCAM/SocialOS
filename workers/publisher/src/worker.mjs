@@ -36,7 +36,17 @@ async function getTarget(job) {
   const platform = await must(await db.from("social_platforms").select("code,is_enabled").eq("id", account.platform_id).single(), "Platform lookup failed");
   if (!platform.is_enabled) throw new PublishError("This platform is disabled in SocialOS.", { code: "PLATFORM_DISABLED" });
   if (account.connection_status !== "connected") throw new PublishError("Social account is not connected.", { code: "ACCOUNT_NOT_CONNECTED" });
-  return { target, post, account: { ...account, platform: platform.code } };
+  const accountVersion = await must(await db.from("social_post_versions").select("*")
+    .eq("post_id", post.id).eq("organization_id", job.organization_id)
+    .eq("social_account_id", account.id).maybeSingle(), "Account content version lookup failed");
+  const defaultVersion = await must(await db.from("social_post_versions").select("*")
+    .eq("post_id", post.id).eq("organization_id", job.organization_id)
+    .eq("is_default", true).single(), "Default content version lookup failed");
+  return {
+    target, post, contentVersion: accountVersion || defaultVersion,
+    hasAccountVersion: Boolean(accountVersion),
+    account: { ...account, platform: platform.code }
+  };
 }
 function encryptionKey(version) {
   let keys = {};
@@ -260,11 +270,18 @@ async function handleJob(job) {
     await must(await db.from("social_post_targets").update({ status: "publishing" }).eq("id", target.id), "Unable to mark target publishing");
     await must(await db.from("social_posts").update({ status: "processing" }).eq("id", context.post.id).eq("organization_id", job.organization_id), "Unable to mark post processing");
     const token = await getToken(context.account);
-    const media = await getMedia(context.post.id, job.organization_id, context.account.platform);
+    const media = await getMedia(context.contentVersion.id, job.organization_id, context.account.platform);
     const publication = await publishTarget({
       account: { ...context.account, granted_scopes: context.account.granted_scopes || [] },
       token,
-      post: { ...context.post, body: target.caption_override ?? context.post.body, platformOptions: target.platform_options || {} },
+      post: {
+        ...context.post,
+        title: context.contentVersion.title ?? context.post.title,
+        body: context.hasAccountVersion
+          ? context.contentVersion.body
+          : (target.caption_override ?? context.contentVersion.body),
+        platformOptions: context.contentVersion.platform_options || target.platform_options || {}
+      },
       media
     });
     await finish(job, target, { ...publication, platform: context.account.platform });
