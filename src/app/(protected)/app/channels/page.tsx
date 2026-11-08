@@ -27,7 +27,7 @@ function configured(provider:string) {
 function canStart(provider:string) {
   return ["GOOGLE","LINKEDIN","META"].includes(provider) && configured(provider) &&
     Boolean(process.env.SOCIAL_OAUTH_REDIRECT_BASE_URL && process.env.SOCIAL_OAUTH_STATE_SECRET &&
-      process.env.SOCIAL_TOKEN_ENCRYPTION_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY);
+      (process.env.SOCIAL_TOKEN_ENCRYPTION_KEY || process.env.SOCIAL_TOKEN_ENCRYPTION_KEYS) && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 const messages:Record<string,string> = {
   connected:"Social account connected and credentials encrypted successfully.",
