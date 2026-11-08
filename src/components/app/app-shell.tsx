@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
 import {
   Activity, BarChart3, CalendarDays, ChevronDown, CircleHelp, Command,
-  FolderKanban, LayoutDashboard, MessageSquare,
+  FolderKanban, LayoutDashboard, MessageSquare, Radio,
   Settings2, Sparkles, Users2, Video, type LucideIcon
 } from "lucide-react";
 
@@ -18,6 +18,7 @@ const primary: {label:string;href:string;icon:LucideIcon;active?:boolean}[] = [
   {label:"Analytics",href:"/app/analytics",icon:BarChart3},
   {label:"Brands",href:"/app/brands",icon:FolderKanban},
   {label:"Social channels",href:"/app/channels",icon:Activity},
+  {label:"Publishing centre",href:"/app/publishing",icon:Radio},
 ];
 const workspace: {label:string;icon:LucideIcon}[] = [
   {label:"Team members",icon:Users2},
@@ -46,7 +47,7 @@ export function AppShell({children,email,workspaceName,brandName}:{children:Reac
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-5">
         <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#a0aaa3]">Workspace</p>
-        <div className="space-y-1">{primary.map(item=>{const active=item.href==="/app/brands"?pathname.startsWith("/app/brands"):pathname===item.href;const Icon=item.icon;return <Link key={item.href} href={item.href} aria-disabled={item.href!=="/app"} onClick={e=>{if(!["/app","/app/brands","/app/channels"].includes(item.href))e.preventDefault();}} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${active?"bg-[#eaf3ed] text-[#176b4b]":"text-[#657269] hover:bg-[#f7f9f7]"}`}><Icon size={17}/><span className="flex-1">{item.label}</span>{!["/app","/app/brands","/app/channels"].includes(item.href)&&<span className="rounded bg-[#f2f4f2] px-1.5 py-0.5 text-[9px] text-[#9aa49d]">Soon</span>}</Link>})}</div>
+        <div className="space-y-1">{primary.map(item=>{const active=item.href==="/app/brands"?pathname.startsWith("/app/brands"):item.href==="/app/publishing"?pathname.startsWith("/app/publishing"):pathname===item.href;const Icon=item.icon;return <Link key={item.href} href={item.href} aria-disabled={!["/app","/app/brands","/app/channels","/app/publishing"].includes(item.href)} onClick={e=>{if(!["/app","/app/brands","/app/channels","/app/publishing"].includes(item.href))e.preventDefault();}} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${active?"bg-[#eaf3ed] text-[#176b4b]":"text-[#657269] hover:bg-[#f7f9f7]"}`}><Icon size={17}/><span className="flex-1">{item.label}</span>{!["/app","/app/brands","/app/channels","/app/publishing"].includes(item.href)&&<span className="rounded bg-[#f2f4f2] px-1.5 py-0.5 text-[9px] text-[#9aa49d]">Soon</span>}</Link>})}</div>
         <p className="px-3 pb-2 pt-8 text-[10px] font-semibold uppercase tracking-[.16em] text-[#a0aaa3]">Manage</p>
         <div className="space-y-1">{workspace.map(item=>{const Icon=item.icon;return <div key={item.label} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-[#9aa49d]"><Icon size={17}/><span className="flex-1">{item.label}</span><span className="text-[9px]">Soon</span></div>})}</div>
       </nav>
