@@ -13,6 +13,7 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{provider
   const {data:member}=await supabase.from("organization_members").select("organization_id,role")
     .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
   if (!member) return NextResponse.redirect(new URL("/onboarding",request.url));
+  if (!["owner","administrator","manager"].includes(member.role)) return NextResponse.json({error:"Only workspace managers can connect social accounts."},{status:403});
   const brandId=request.nextUrl.searchParams.get("brandId");
   if (!brandId) return NextResponse.json({error:"A brandId is required."},{status:400});
   const {data:brand}=await supabase.from("brands").select("id")
