@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { CalendarClock, CheckCircle2, FileImage, Loader2, Send, UploadCloud } from "lucide-react";
@@ -28,6 +28,7 @@ export function SocialPostComposer({organizationId,brands,accounts,assets:initia
   const [uploading,setUploading]=useState(false);
   const [message,setMessage]=useState("");
   const [error,setError]=useState("");
+  useEffect(()=>{\n    try{const raw=sessionStorage.getItem("socialos:composer-draft");if(!raw)return;const draft=JSON.parse(raw) as {brandId?:string;body?:string};if(draft.brandId&&brands.some(brand=>brand.id===draft.brandId)){setBrandId(draft.brandId);setSelectedAccounts([]);setSelectedAssets([]);}if(typeof draft.body==="string")setBody(draft.body);sessionStorage.removeItem("socialos:composer-draft");setMessage("AI draft loaded. Review and select your publishing destinations.");}catch{sessionStorage.removeItem("socialos:composer-draft");}\n  },[brands]);
   const availableAccounts=useMemo(()=>accounts.filter(a=>a.brand_id===brandId&&a.connection_status==="connected"),[accounts,brandId]);
   const availableAssets=useMemo(()=>assets.filter(a=>a.brand_id===brandId),[assets,brandId]);
   const readyAssets=availableAssets.filter(a=>a.processing_status==="ready");
