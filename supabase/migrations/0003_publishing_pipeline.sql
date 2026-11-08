@@ -209,3 +209,100 @@ grant all on public.social_media_assets,public.social_posts,public.social_post_m
 
 comment on table public.publish_jobs is
   'Durable publishing outbox. Workers claim jobs with claim_publish_jobs; provider adapters must enforce idempotency and platform-specific capability checks.';
+
+
+-- Create a post, attach ready assets, add channel targets and enqueue scheduled work
+-- in one transaction. The caller must be an authenticated workspace member.
+create or replace function public.create_social_post_bundle(p_payload jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,auth,pg_temp
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_org_id uuid := (p_payload->>'organization_id')::uuid;
+  v_brand_id uuid := (p_payload->>'brand_id')::uuid;
+  v_post_id uuid := gen_random_uuid();
+  v_scheduled_at timestamptz := nullif(p_payload->>'scheduled_at','')::timestamptz;
+  v_timezone text := coalesce(nullif(p_payload->>'timezone',''),'UTC');
+  v_role text;
+  v_account_id uuid;
+  v_asset_id uuid;
+  v_target_id uuid;
+  v_item jsonb;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required' using errcode='42501';
+  end if;
+  if v_org_id is null or v_brand_id is null then
+    raise exception 'Organisation and brand are required' using errcode='22023';
+  end if;
+
+  select role into v_role
+  from public.organization_members
+  where organization_id=v_org_id and user_id=v_user_id and status='active';
+  if v_role is null then
+    raise exception 'Active workspace membership required' using errcode='42501';
+  end if;
+  if v_role not in ('owner','administrator','manager','editor','publisher') then
+    raise exception 'Insufficient workspace role' using errcode='42501';
+  end if;
+  if v_scheduled_at is not null and v_role not in ('owner','administrator','manager','publisher') then
+    raise exception 'Publishing permission required to schedule posts' using errcode='42501';
+  end if;
+  if not exists(select 1 from public.brands b where b.id=v_brand_id
+    and b.organization_id=v_org_id and b.is_active) then
+    raise exception 'Active brand not found in this workspace' using errcode='42501';
+  end if;
+  if v_scheduled_at is not null and v_scheduled_at <= now() then
+    raise exception 'Scheduled time must be in the future' using errcode='22023';
+  end if;
+  if not exists(select 1 from jsonb_array_elements_text(coalesce(p_payload->'target_account_ids','[]'::jsonb))) then
+    raise exception 'At least one destination account is required' using errcode='22023';
+  end if;
+
+  insert into public.social_posts(
+    id,organization_id,brand_id,created_by,title,body,status,scheduled_at,timezone
+  ) values (
+    v_post_id,v_org_id,v_brand_id,v_user_id,
+    nullif(p_payload->>'title',''),coalesce(p_payload->>'body',''),
+    case when v_scheduled_at is null then 'draft'::public.social_post_status else 'scheduled'::public.social_post_status end,
+    v_scheduled_at,v_timezone
+  );
+
+  for v_item in select value from jsonb_array_elements(coalesce(p_payload->'asset_ids','[]'::jsonb))
+  loop
+    v_asset_id := (v_item#>>'{}')::uuid;
+    if not exists(select 1 from public.social_media_assets a
+      where a.id=v_asset_id and a.organization_id=v_org_id and a.brand_id=v_brand_id
+        and a.processing_status='ready') then
+      raise exception 'Media asset is unavailable, unprocessed or belongs to another brand' using errcode='42501';
+    end if;
+    insert into public.social_post_media(organization_id,post_id,asset_id,position)
+    values(v_org_id,v_post_id,v_asset_id,(select count(*) from public.social_post_media where post_id=v_post_id));
+  end loop;
+
+  for v_item in select value from jsonb_array_elements(coalesce(p_payload->'target_account_ids','[]'::jsonb))
+  loop
+    v_account_id := (v_item#>>'{}')::uuid;
+    if not exists(select 1 from public.social_accounts a
+      where a.id=v_account_id and a.organization_id=v_org_id and a.brand_id=v_brand_id
+        and a.connection_status='connected') then
+      raise exception 'Destination account is not connected to this brand' using errcode='42501';
+    end if;
+    insert into public.social_post_targets(organization_id,post_id,social_account_id,status,scheduled_at)
+    values(v_org_id,v_post_id,v_account_id,
+      case when v_scheduled_at is null then 'pending'::public.social_post_target_status else 'queued'::public.social_post_target_status end,
+      v_scheduled_at)
+    returning id into v_target_id;
+    if v_scheduled_at is not null then
+      insert into public.publish_jobs(organization_id,post_id,target_id,idempotency_key,available_at)
+      values(v_org_id,v_post_id,v_target_id,'social-post:'||v_post_id::text||':target:'||v_target_id::text,v_scheduled_at);
+    end if;
+  end loop;
+  return v_post_id;
+end;
+$$;
+revoke all on function public.create_social_post_bundle(jsonb) from public,anon;
+grant execute on function public.create_social_post_bundle(jsonb) to authenticated;
