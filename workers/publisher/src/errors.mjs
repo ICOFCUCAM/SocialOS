@@ -17,7 +17,7 @@ export async function providerJson(response, provider) {
     const retryable = response.status === 429 || response.status >= 500;
     const retryAfter = Number(response.headers.get("retry-after"));
     throw new PublishError(provider + " API returned HTTP " + response.status, {
-      code: provider.toUpperCase() + "_HTTP_" + response.status,
+      code: response.status === 401 ? "AUTHORIZATION_REVOKED" : response.status === 403 ? "PROVIDER_PERMISSION_DENIED" : provider.toUpperCase() + "_HTTP_" + response.status,
       retryable,
       retryAfterMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : null,
       ambiguous: response.status >= 500
