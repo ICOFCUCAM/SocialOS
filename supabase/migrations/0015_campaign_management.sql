@@ -115,8 +115,8 @@ begin
     or jsonb_typeof(v_metrics)<>'array' or jsonb_array_length(v_metrics)>10 then
     raise exception 'Campaign planning list exceeds limits' using errcode='22023';
   end if;
-  if exists(select 1 from unnest(v_pillars) p where length(p)>120)
-    or exists(select 1 from unnest(v_channels) ch where ch not in ('instagram','facebook','youtube','linkedin','threads','pinterest','tiktok','x'))
+  if exists(select 1 from unnest(v_pillars) as pillar(value) where length(pillar.value)>120)
+    or exists(select 1 from unnest(v_channels) as channel(value) where channel.value not in ('instagram','facebook','youtube','linkedin','threads','pinterest','tiktok','x'))
     or exists(select 1 from jsonb_array_elements(v_metrics) as item(value)
       where jsonb_typeof(item.value)<>'object' or length(coalesce(item.value->>'name',''))>80
         or length(coalesce(item.value->>'target',''))>80 or length(coalesce(item.value->>'unit',''))>30) then
@@ -183,8 +183,8 @@ begin
     or jsonb_typeof(v_metrics)<>'array' or jsonb_array_length(v_metrics)>10 then
     raise exception 'Campaign field value exceeds limits' using errcode='22023';
   end if;
-  if exists(select 1 from unnest(v_pillars) p where length(p)>120)
-    or exists(select 1 from unnest(v_channels) ch where ch not in ('instagram','facebook','youtube','linkedin','threads','pinterest','tiktok','x'))
+  if exists(select 1 from unnest(v_pillars) as pillar(value) where length(pillar.value)>120)
+    or exists(select 1 from unnest(v_channels) as channel(value) where channel.value not in ('instagram','facebook','youtube','linkedin','threads','pinterest','tiktok','x'))
     or exists(select 1 from jsonb_array_elements(v_metrics) as item(value)
       where jsonb_typeof(item.value)<>'object' or length(coalesce(item.value->>'name',''))>80
         or length(coalesce(item.value->>'target',''))>80 or length(coalesce(item.value->>'unit',''))>30) then
