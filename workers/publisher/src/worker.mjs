@@ -293,7 +293,7 @@ async function handleJob(job) {
     });
     await finish(job, target, { ...publication, platform: context.account.platform });
   } catch (error) {
-    if (rateLimitScope && (error?.code === "META_HTTP_429" || error?.code === "FACEBOOK_HTTP_429" || error?.code === "INSTAGRAM_HTTP_429" || error?.code === "LINKEDIN_HTTP_429" || error?.code === "YOUTUBE_HTTP_429")) {
+    if (rateLimitScope && (error?.status === 429 || error?.code === "YOUTUBE_DAILY_QUOTA_EXCEEDED" || error?.code === "YOUTUBE_RATE_LIMIT_EXCEEDED" || error?.code === "LINKEDIN_QUOTA_EXCEEDED")) {
       try { await deferProviderCapacity(rateLimitScope, error.retryAfterMs || 60000); }
       catch (coordinationError) { process.stderr.write(JSON.stringify({ event: "provider_rate_limit_persist_failed", jobId: job.id, code: coordinationError.code || "RATE_LIMIT_COORDINATOR_UNAVAILABLE" }) + "\\n"); }
     }
