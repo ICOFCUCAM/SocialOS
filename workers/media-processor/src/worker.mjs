@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { randomUUID, createHash } from "node:crypto";
+import { scanFile } from "./scanner.mjs";
 
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -13,7 +14,7 @@ const db = createClient(url, key, { auth: { autoRefreshToken: false, persistSess
 const bucket = process.env.MEDIA_BUCKET || "social-media";
 const workerId = process.env.WORKER_ID || "media-" + randomUUID();
 const waitMs = Math.max(500, Number(process.env.POLL_INTERVAL_MS) || 2500);
-const maxBytes = 250 * 1024 * 1024;
+const maxBytes = Math.max(1, Number(process.env.MAX_MEDIA_BYTES) || 250 * 1024 * 1024);
 const maxPixels = 40_000_000;
 let stopping = false;
 
@@ -71,6 +72,8 @@ async function processAsset(job) {
   try {
     const input = path.join(dir, "source.bin");
     await writeFile(input, bytes, { flag: "wx", mode: 0o600 });
+    // No parser/decoder is allowed to touch customer media until ClamAV reports clean.
+    await scanFile(input);
     let result;
     if (detected.startsWith("image/")) {
       const meta = await sharp(input, { limitInputPixels: maxPixels, failOn: "error" }).metadata();
@@ -148,7 +151,7 @@ async function handle(job) {
 async function poll() {
   const { error: recoveryError } = await db.rpc("recover_stale_media_processing_jobs", { p_lease_minutes: 20 });
   if (recoveryError) throw recoveryError;
-  const { data, error } = await db.rpc("claim_media_processing_jobs", { p_worker_id: workerId, p_limit: 2 });
+  const { data, error } = await db.rpc("claim_media_processing_jobs", { p_worker_id: workerId, p_limit: 1 });
   if (error) throw error;
   for (const job of data || []) await handle(job);
   return (data || []).length;
