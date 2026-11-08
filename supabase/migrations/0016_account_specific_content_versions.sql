@@ -145,8 +145,82 @@ begin
   end if;
 
   -- This function is called inside the same PostgreSQL transaction.
-  v_post_id := public.create_social_post_bundle(p_payload);
+  -- Revalidate authorization here because the called SECURITY DEFINER RPC
+  -- cannot be treated as an authorization grant for this wrapper.
+  select role into v_role
+  from public.organization_members
+  where organization_id=v_org_id and user_id=v_user_id and status='active';
+  if v_role is null or v_role not in ('owner','administrator','manager','editor','publisher') then
+    raise exception 'Active workspace publishing membership required' using errcode='42501';
+  end if;
+  if v_scheduled_at is not null and v_role not in ('owner','administrator','manager','publisher') then
+    raise exception 'Publishing permission required to schedule posts' using errcode='42501';
+  end if;
+  if not exists(select 1 from public.brands b
+    where b.id=v_brand_id and b.organization_id=v_org_id and b.is_active) then
+    raise exception 'Active brand not found' using errcode='42501';
+  end if;
+  if v_role not in ('owner','administrator','manager') and not exists(
+    select 1 from public.brand_members bm
+    where bm.organization_id=v_org_id and bm.brand_id=v_brand_id
+      and bm.user_id=v_user_id and bm.role in ('manager','editor','publisher')
+  ) then
+    raise exception 'Brand membership required' using errcode='42501';
+  end if;
+  if v_scheduled_at is not null and v_role not in ('owner','administrator','manager','publisher')
+    and not exists(select 1 from public.brand_members bm
+      where bm.organization_id=v_org_id and bm.brand_id=v_brand_id
+        and bm.user_id=v_user_id and bm.role in ('manager','publisher')) then
+    raise exception 'Brand publishing permission required' using errcode='42501';
+  end if;
 
+  -- Create the original post/targets/outbox within this transaction. The
+  -- nested SECURITY DEFINER function still validates every target and asset.
+  insert into public.social_posts(
+    id,organization_id,brand_id,created_by,title,body,status,scheduled_at,timezone
+  ) values (
+    v_post_id,v_org_id,v_brand_id,v_user_id,
+    nullif(p_payload->>'title',''),coalesce(p_payload->>'body',''),
+    case when v_scheduled_at is null then 'draft'::public.social_post_status else 'scheduled'::public.social_post_status end,
+    v_scheduled_at,coalesce(nullif(p_payload->>'timezone',''),'UTC')
+  );
+
+  -- Validate and attach shared media, and create one target/job per selected
+  -- account using the same checks as the original bundle RPC.
+  if jsonb_array_length(coalesce(p_payload->'target_account_ids','[]'::jsonb)) < 1
+     or jsonb_array_length(coalesce(p_payload->'target_account_ids','[]'::jsonb)) > 20
+     or jsonb_array_length(coalesce(p_payload->'asset_ids','[]'::jsonb)) > 20 then
+    raise exception 'Invalid destination or media count' using errcode='22023';
+  end if;
+  for v_item in select value from jsonb_array_elements(coalesce(p_payload->'asset_ids','[]'::jsonb))
+  loop
+    v_asset_id := (v_item#>>'{}')::uuid;
+    if not exists(select 1 from public.social_media_assets a
+      where a.id=v_asset_id and a.organization_id=v_org_id and a.brand_id=v_brand_id
+        and a.processing_status='ready') then
+      raise exception 'Media asset unavailable or outside this brand' using errcode='42501';
+    end if;
+    insert into public.social_post_media(organization_id,post_id,asset_id,position)
+    values(v_org_id,v_post_id,v_asset_id,(select count(*) from public.social_post_media where post_id=v_post_id));
+  end loop;
+  for v_item in select value from jsonb_array_elements(coalesce(p_payload->'target_account_ids','[]'::jsonb))
+  loop
+    v_account_id := (v_item#>>'{}')::uuid;
+    if not exists(select 1 from public.social_accounts a
+      where a.id=v_account_id and a.organization_id=v_org_id and a.brand_id=v_brand_id
+        and a.connection_status='connected') then
+      raise exception 'Destination account is not connected to this brand' using errcode='42501';
+    end if;
+    insert into public.social_post_targets(organization_id,post_id,social_account_id,status,scheduled_at)
+    values(v_org_id,v_post_id,v_account_id,
+      case when v_scheduled_at is null then 'pending'::public.social_post_target_status else 'queued'::public.social_post_target_status end,
+      v_scheduled_at)
+    returning id into v_target_id;
+    if v_scheduled_at is not null then
+      insert into public.publish_jobs(organization_id,post_id,target_id,idempotency_key,available_at)
+      values(v_org_id,v_post_id,v_target_id,'social-post:'||v_post_id::text||':target:'||v_target_id::text,v_scheduled_at);
+    end if;
+  end loop;
   insert into public.social_post_versions(
     organization_id,post_id,social_account_id,is_default,title,body,platform_options
   )
