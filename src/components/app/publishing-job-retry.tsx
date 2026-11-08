@@ -12,7 +12,7 @@ export function PublishingJobRetry({jobId}:{jobId:string}) {
     if(!window.confirm("Retry this known publishing failure? Jobs with uncertain provider outcomes cannot be retried here.")) return;
     setBusy(true);setError("");
     try {
-      const response=await fetch(`/api/social/publishing/jobs/${jobId}/retry`,{method:"POST"});
+      const response=await fetch("/api/social/publishing/operations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"retry",jobId})});
       const data=await response.json();
       if(!response.ok) throw new Error(data.error||"Unable to retry this job.");
       router.refresh();
