@@ -67,3 +67,15 @@ Workers implement lease recovery for abandoned `running` jobs, bounded exponenti
 - The coordinator does not invent provider quotas or assume all endpoints share the same quota. Business-level scopes and provider-specific usage-header interpretation remain future work until the provider contracts are verified.
 - Redis coordinates cooldown state only. PostgreSQL remains the durable publishing queue and source of truth.
 - Local development without `REDIS_URL` may run without distributed coordination; production may not.
+
+
+## Provider quota intelligence
+
+The publisher distinguishes explicit provider quota signals from generic HTTP failures:
+
+- **Meta:** parses `X-App-Usage` and `X-Business-Use-Case-Usage` when present. App usage percentages are recorded as signals only; they are not converted into invented reset times. A business-use-case recovery estimate becomes a business-scoped cooldown when supplied by Meta.
+- **LinkedIn:** recognises documented throttle error messages and records the stated application/member/day scope. It does not infer a reset time where the API response supplies none.
+- **YouTube:** distinguishes daily quota exhaustion (`quotaExceeded`, `dailyLimitExceeded`) from short-window rate-limit errors (`rateLimitExceeded`, `userRateLimitExceeded`). Daily quota cooldown is calculated to the next midnight in America/Los_Angeles, including daylight-saving transitions; short-window errors use the general bounded retry policy.
+- Generic HTTP 429 continues to respect `Retry-After`. No provider quota values or universal thresholds are hard-coded.
+
+The quota parsers are advisory inputs to the Redis cooldown coordinator. PostgreSQL remains the durable queue; provider usage data and reset times are not treated as a substitute for provider-side quota documentation or application approval.
