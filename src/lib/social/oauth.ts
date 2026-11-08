@@ -1,12 +1,20 @@
 import "server-only";
 import { createHmac, randomBytes, createHash, createCipheriv, createDecipheriv, timingSafeEqual } from "node:crypto";
 
-export type Provider = "youtube" | "linkedin";
+export type Provider = "youtube" | "linkedin" | "meta";
 type ProviderConfig = {
   clientId: string; clientSecret: string; authorizeUrl: string; tokenUrl: string;
   profileUrl: string; scopes: string[]; name: string; platformCode: string;
 };
 export function getProvider(provider: string): ProviderConfig | null {
+  if (provider === "meta") {
+    const clientId=process.env.META_CLIENT_ID, clientSecret=process.env.META_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return null;
+    return {clientId,clientSecret,authorizeUrl:"https://www.facebook.com/v25.0/dialog/oauth",
+      tokenUrl:"https://graph.facebook.com/v25.0/oauth/access_token",profileUrl:"https://graph.facebook.com/v25.0/me",
+      scopes:["pages_show_list","pages_read_engagement","pages_manage_posts","pages_read_user_content","instagram_basic","instagram_content_publish"],
+      name:"Meta",platformCode:"facebook"};
+  }
   if (provider === "youtube") {
     const clientId=process.env.GOOGLE_CLIENT_ID, clientSecret=process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) return null;
