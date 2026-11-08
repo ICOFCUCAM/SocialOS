@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { AtSign, BriefcaseBusiness, CheckCircle2, CircleAlert, Facebook, Globe2, Instagram, Linkedin, Pin, Video, Youtube } from "lucide-react";
+import { AtSign, BriefcaseBusiness, CheckCircle2, CircleAlert, Facebook, Globe2, Instagram, Linkedin, Pin, Plus, Video, Youtube } from "lucide-react";
 
 const providers = [
   {code:"instagram",name:"Instagram",group:"Meta",description:"Publish images, reels and supported media formats.",icon:Instagram,env:"META"},
