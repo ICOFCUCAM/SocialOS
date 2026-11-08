@@ -1,12 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { publishTarget } from "../src/providers/index.mjs";
+import {
+  getProviderAdapter,
+  listProviderAdapters,
+  publishTarget
+} from "../src/providers/index.mjs";
 import { requireScopes } from "../src/errors.mjs";
 
 test("unsupported platforms are rejected rather than silently accepted", async () => {
   await assert.rejects(
-    publishTarget({ account: { platform: "tiktok" } }),
+    publishTarget({ account: { platform: "tiktok" }, token: "token", post: { body: "Hello" } }),
     error => error.code === "PROVIDER_NOT_SUPPORTED"
+  );
+});
+
+test("registry exposes only the currently implemented provider capabilities", () => {
+  assert.deepEqual(listProviderAdapters().map(item => item.key).sort(), [
+    "facebook", "instagram", "linkedin", "youtube"
+  ]);
+  assert.deepEqual(getProviderAdapter("linkedin").capabilities, {
+    text: true, image: false, video: false, maxMediaItems: 0
+  });
+});
+
+test("invalid provider inputs fail before adapter execution", async () => {
+  await assert.rejects(
+    publishTarget({ account: { platform: "facebook" }, token: "", post: { body: "Hello" } }),
+    error => error.code === "INVALID_PUBLISH_INPUT"
+  );
+  await assert.rejects(
+    publishTarget({ account: { platform: "facebook" }, token: "token", post: { body: "Hello" }, media: {} }),
+    error => error.code === "INVALID_PUBLISH_INPUT"
   );
 });
 
