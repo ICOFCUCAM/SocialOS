@@ -9,13 +9,8 @@ on conflict(id) do update set
   file_size_limit=excluded.file_size_limit,
   allowed_mime_types=excluded.allowed_mime_types;
 
--- No direct browser access to the bucket. The server issues short-lived signed upload
--- and download URLs after checking organisation and brand access.
-drop policy if exists social_media_no_direct_client_access on storage.objects;
-create policy social_media_no_direct_client_access
-on storage.objects for all to anon,authenticated
-using (bucket_id <> 'social-media')
-with check (bucket_id <> 'social-media');
+-- No authenticated or anonymous storage.objects policy is created for this bucket.
+-- Storage access is through server-issued signed URLs only.
 
 comment on table public.social_media_assets is
   'Tenant-scoped media records. Object storage is private; clients use server-issued signed URLs.';
