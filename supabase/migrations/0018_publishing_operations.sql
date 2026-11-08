@@ -168,11 +168,21 @@ begin
   values(v_job.organization_id,v_job.id,v_job.target_id,'operator_marked_published',
     v_job.attempt_count,auth.uid(),'Operator reconciled the provider publication.',
     jsonb_build_object('external_post_id',trim(p_external_post_id)));
+  update public.social_posts p set
+    status = case
+      when not exists(select 1 from public.social_post_targets t where t.post_id=p.id and t.organization_id=p.organization_id and t.status<>'published') then 'published'::public.social_post_status
+      when exists(select 1 from public.social_post_targets t where t.post_id=p.id and t.organization_id=p.organization_id and t.status='published')
+        and not exists(select 1 from public.social_post_targets t where t.post_id=p.id and t.organization_id=p.organization_id and t.status not in ('published','failed','skipped','cancelled')) then 'partially_published'::public.social_post_status
+      else p.status
+    end,
+    published_at=coalesce(p.published_at,now())
+  where p.id=v_job.post_id and p.organization_id=v_job.organization_id;
+
   insert into public.audit_events(organization_id,actor_user_id,action,resource_type,resource_id,metadata)
   values(v_job.organization_id,auth.uid(),'social.publish_job.outcome_reconciled',
     'publish_job',v_job.id,jsonb_build_object('target_id',v_job.target_id,
     'external_post_id',trim(p_external_post_id)));
 end;
-$$;
+$;
 revoke all on function public.operator_reconcile_publish_job(uuid,text,text) from public,anon;
 grant execute on function public.operator_reconcile_publish_job(uuid,text,text) to authenticated;
