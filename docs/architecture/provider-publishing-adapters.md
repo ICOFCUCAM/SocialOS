@@ -1,38 +1,60 @@
-# Official provider publishing adapters
+# Official provider publishing and worker orchestration
 
-## Scope
+## Supported provider operations
 
-This milestone introduces isolated provider adapters for Facebook Pages, Instagram professional accounts, YouTube channels and LinkedIn member text posts. Adapters call official provider APIs directly and return external post IDs. They are a provider integration layer, not yet a complete scheduled-publishing service.
+- Facebook Pages: text feed posts and single photo/video posts using a temporary fetchable media URL.
+- Instagram professional accounts: one image or Reel per publication, using the media-container then publish flow. Video container processing is polled before publishing.
+- YouTube: one MP4 video through the resumable upload API. Default privacy is private unless an explicit option is supplied.
+- LinkedIn: text-only member posts through the Posts API. Media uploads are deliberately rejected until its upload workflow is implemented.
+- Other platforms fail with `PROVIDER_NOT_SUPPORTED`; no unofficial API or browser automation fallback is used.
 
 ## OAuth permissions
-
-The OAuth setup requests publishing permissions for supported provider operations:
 
 - Meta: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`.
 - YouTube: `https://www.googleapis.com/auth/youtube.upload`.
 - LinkedIn: `openid`, `profile`, `w_member_social`.
 
-Existing connections created with read-only or profile-only permissions must be reconnected and consent to the additional scopes. Provider app review, verification and user eligibility remain subject to each provider's requirements. A requested scope is not proof that the provider has approved the application for production access.
+Existing accounts must reconnect to grant newly requested publishing scopes. Provider app review, verification, user eligibility and production access remain subject to each provider's requirements. A requested scope does not mean the provider has approved the application.
 
-## Adapter operations
+## Publisher worker
 
-- Facebook Pages: text feed posts and single photo/video posts using a temporary fetchable media URL.
-- Instagram professional accounts: one image or Reel per publication, using the media-container then publish flow. Video container processing is polled before publishing.
-- YouTube: one MP4 video through the resumable upload API. Default privacy is private unless an explicit option is supplied.
-- LinkedIn: text-only member posts through the Posts API. Media uploads are deliberately rejected until the provider media upload workflow is implemented.
-- Other platforms fail with `PROVIDER_NOT_SUPPORTED`; no unofficial API or browser automation fallback is used.
+Build `workers/publisher/Dockerfile` with `workers/publisher` as the build context. Run as a separate long-running service, not as a Vercel function.
 
-## Safety and retry semantics
+Required environment variables:
 
-- Exact granted scopes are checked before API calls.
-- Provider HTTP 429 and 5xx responses are marked retryable; 5xx responses and interrupted uploads can have ambiguous outcomes.
-- An ambiguous timeout must be reconciled against provider state before retrying. Do not blindly retry and risk duplicate posts.
-- YouTube resumable upload URLs are host-validated before sending OAuth credentials or media.
-- Provider API versions are explicit configuration: `META_GRAPH_API_VERSION` and `LINKEDIN_API_VERSION`.
-- Meta and LinkedIn adapters currently return a provider ID without a permalink when no canonical permalink is returned by the API.
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SOCIAL_TOKEN_ENCRYPTION_KEY` — base64-encoded 32-byte AES-256-GCM key matching the key version used to encrypt the account tokens.
 
-## Not yet wired to the durable job queue
+Provider configuration:
 
-The adapters are isolated modules with unit-level contract tests. They are not yet connected to `claim_publish_jobs`, token decryption in the worker, media derivative retrieval, lease recovery, durable target/job status updates, or audit logging. Do not deploy them as a publishing service or claim that scheduled posts are now published end-to-end.
+- `META_GRAPH_API_VERSION` — explicit Graph API version, e.g. `v25.0`.
+- `LINKEDIN_API_VERSION` — provider-approved version in `YYYYMM` form.
+- `PUBLISH_WORKER_ID`, `PUBLISH_POLL_INTERVAL_MS`, `PUBLISH_MEDIA_URL_TTL_SECONDS`, `PUBLISH_MAX_VIDEO_BYTES` are optional worker controls.
 
-Before production use, implement the publishing worker orchestration, credential refresh/revocation handling, idempotent reconciliation for ambiguous outcomes, per-provider rate limits, staging integration tests and official app review.
+The worker:
+1. Runs the stale publishing lease recovery RPC and atomically claims one due job.
+2. Loads its tenant-scoped post, target, connected account and platform.
+3. Decrypts AES-256-GCM credentials inside the worker process only.
+4. Stops and marks the account for reauthorization if its access token has expired. Automatic refresh is not yet implemented.
+5. Resolves the target platform's prepared media profile from private Storage. It issues short-lived signed URLs for Meta and downloads the prepared YouTube MP4.
+6. Calls the platform adapter and records the external post ID and permalink, when returned.
+7. Updates target, job and aggregate post states and writes an audit event.
+
+## Retry and duplicate prevention
+
+- HTTP 429 responses can be retried using `Retry-After`; transient failures use bounded exponential backoff with jitter.
+- Ambiguous provider outcomes are dead-lettered for manual reconciliation. The worker must not blindly retry a timeout that might have created a post.
+- An expired worker lease is also dead-lettered unless a provider post ID was already saved. This avoids automatic duplicate publication after a worker crashes between the remote publish call and the database update.
+- Stale lease recovery requires migration `0011_publish_worker_lease_recovery.sql`.
+
+## Explicit limitations
+
+- The adapters have not been verified against live provider accounts.
+- Instagram carousel, Facebook multi-photo, LinkedIn media, and TikTok, X, Threads and Pinterest publishing are not implemented.
+- OAuth token refresh and revocation handling are not implemented; expired accounts must reconnect.
+- Platform rate-limit coordination across multiple workers, provider-side reconciliation tools, integration tests and operational dashboards remain future work.
+- YouTube upload currently buffers the prepared MP4 in memory; size limits and a single-job worker are important until streaming/resumable chunk persistence is implemented.
+- Provider API requirements, app review and publishing permissions must be rechecked before production.
+
+No database migration has been applied and no worker has been deployed by this change.
