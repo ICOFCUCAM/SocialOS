@@ -80,7 +80,6 @@ export async function POST(request: NextRequest) {
     path: signed.path,
     token: signed.token,
     signedUrl: signed.signedUrl,
-    expiresInSeconds: 120,
     maxBytes: MAX_FILE_BYTES,
   }, { status: 201 });
 }
