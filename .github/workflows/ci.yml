@@ -2,6 +2,7 @@ name: SocialOS CI
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches: [main, "feat/**"]
 
@@ -23,6 +24,8 @@ jobs:
       - name: Publisher worker syntax and tests
         run: |
           node --check workers/publisher/src/worker.mjs
+          node --check workers/publisher/src/content-version.mjs
+          node --check workers/publisher/src/providers/index.mjs
           node --check workers/analytics-collector/src/collector.mjs
           node --check workers/analytics-collector/src/meta-insights.mjs
           node --check workers/analytics-collector/src/linkedin-insights.mjs
