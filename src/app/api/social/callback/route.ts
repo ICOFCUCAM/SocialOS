@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createSocialAdminClient } from "@/lib/social/admin";
-import { encryptToken, getProvider, oauthRedirectUri, toPgBytea, verifyOAuthState, type Provider } from "@/lib/social/oauth";
+import { decryptToken, encryptToken, getProvider, oauthRedirectUri, toPgBytea, verifyOAuthState, type Provider } from "@/lib/social/oauth";
 
 type TokenResponse={access_token?:string;refresh_token?:string;expires_in?:number;refresh_token_expires_in?:number;scope?:string;token_type?:string;error?:string};
 type Profile={id?:string;sub?:string;name?:string;picture?:string};
+function fromPgBytea(value:string|Uint8Array) {
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  const hex=value.startsWith("\\x")?value.slice(2):value;
+  if (!/^(?:[0-9a-f]{2})+$/i.test(hex)) throw new Error("Stored encrypted token has invalid bytea encoding.");
+  return Buffer.from(hex,"hex");
+}
 function returnToApp(request:NextRequest,status:string) {
   const base=process.env.SOCIAL_OAUTH_REDIRECT_BASE_URL;
   if (!base) throw new Error("SOCIAL_OAUTH_REDIRECT_BASE_URL is not configured.");
@@ -134,15 +140,19 @@ export async function GET(request:NextRequest) {
     },{onConflict:"organization_id,platform_id,external_account_id"}).select("id").single();
     if (accountError || !account) throw new Error("Unable to save connected account.");
     const access=encryptToken(tokens.access_token);
-    const refresh=tokens.refresh_token?encryptToken(tokens.refresh_token):null;
-    const {data:previousTokens}=await admin.from("social_account_tokens").select("refresh_token_nonce,refresh_token_ciphertext,refresh_token_tag,refresh_token_expires_at")
+    const refresh=tokens.refresh_token
+      ? encryptToken(tokens.refresh_token)
+      : previousTokens?.refresh_token_ciphertext
+        ? encryptToken(decryptToken(fromPgBytea(previousTokens.refresh_token_nonce),fromPgBytea(previousTokens.refresh_token_ciphertext),fromPgBytea(previousTokens.refresh_token_tag),previousTokens.encryption_key_version))
+        : null;
+    const {data:previousTokens}=await admin.from("social_account_tokens").select("refresh_token_nonce,refresh_token_ciphertext,refresh_token_tag,refresh_token_expires_at,encryption_key_version")
       .eq("social_account_id",account.id).eq("organization_id",signed.organizationId).maybeSingle();
     const {error:tokenError}=await admin.from("social_account_tokens").upsert({
       organization_id:signed.organizationId,social_account_id:account.id,
       access_token_nonce:toPgBytea(access.nonce),access_token_ciphertext:toPgBytea(access.ciphertext),access_token_tag:toPgBytea(access.tag),
-      refresh_token_nonce:refresh?toPgBytea(refresh.nonce):previousTokens?.refresh_token_nonce??null,
-      refresh_token_ciphertext:refresh?toPgBytea(refresh.ciphertext):previousTokens?.refresh_token_ciphertext??null,
-      refresh_token_tag:refresh?toPgBytea(refresh.tag):previousTokens?.refresh_token_tag??null,
+      refresh_token_nonce:refresh?toPgBytea(refresh.nonce):null,
+      refresh_token_ciphertext:refresh?toPgBytea(refresh.ciphertext):null,
+      refresh_token_tag:refresh?toPgBytea(refresh.tag):null,
       encryption_algorithm:access.algorithm,encryption_key_version:access.keyVersion,
       access_token_expires_at:tokens.expires_in?new Date(Date.now()+tokens.expires_in*1000).toISOString():null,
       refresh_token_expires_at:tokens.refresh_token_expires_in?new Date(Date.now()+tokens.refresh_token_expires_in*1000).toISOString():previousTokens?.refresh_token_expires_at??null,
