@@ -63,10 +63,19 @@ export async function POST(request: NextRequest) {
   }).eq("id", asset.id);
   if (updateError) return NextResponse.json({ error: "Upload verified but asset state could not be updated." }, { status: 500 });
 
+  const { error: queueError } = await admin.from("media_processing_jobs").upsert({
+    organization_id: asset.organization_id,
+    asset_id: asset.id,
+    status: "queued",
+    idempotency_key: `media-asset:${asset.id}:process:v1`,
+    available_at: new Date().toISOString(),
+  }, { onConflict: "asset_id" });
+  if (queueError) return NextResponse.json({ error: "Upload verified but media processing could not be queued." }, { status: 503 });
+
   return NextResponse.json({
     assetId: asset.id,
     status: "uploaded",
-    processingStatus: "pending",
+    processingStatus: "queued",
     message: "Upload verified. Media processing is the next stage; the asset cannot be published until it passes processing and safety checks.",
   });
 }
