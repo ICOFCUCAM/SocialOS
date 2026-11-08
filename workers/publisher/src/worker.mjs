@@ -42,14 +42,105 @@ async function getTarget(job) {
   if (account.connection_status !== "connected") throw new PublishError("Social account is not connected.", { code: "ACCOUNT_NOT_CONNECTED" });
   return { target, post, account: { ...account, platform: platform.code } };
 }
+function encryptionKey() {
+  const raw = process.env.SOCIAL_TOKEN_ENCRYPTION_KEY;
+  if (!raw) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");
+  const value = Buffer.from(raw, "base64");
+  if (value.length !== 32) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY must decode to 32 bytes.");
+  return value;
+}
+function encryptStoredToken(token) {
+  const nonce = randomUUID().replaceAll("-", "").slice(0, 24);
+  const iv = Buffer.from(nonce, "hex");
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+  return { nonce: iv, ciphertext, tag: cipher.getAuthTag() };
+}
+function decryptStoredToken(nonce, ciphertext, tag) {
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), nonce);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+}
+async function refreshProviderToken(account, row) {
+  const configuredVersion = process.env.SOCIAL_TOKEN_KEY_VERSION || "v1";
+  if (row.encryption_key_version !== configuredVersion) {
+    throw new PublishError("Stored OAuth credentials use a different encryption key version.", { code: "TOKEN_KEY_VERSION_MISMATCH" });
+  }
+  if (account.platform === "facebook" || account.platform === "instagram") {
+    throw new PublishError("Meta Page tokens cannot be refreshed through the generic OAuth refresh flow; reconnect the account when expired.", { code: "REAUTHORIZATION_REQUIRED" });
+  }
+  if (!row.refresh_token_ciphertext || !row.refresh_token_nonce || !row.refresh_token_tag) {
+    throw new PublishError("No refresh token is available. Reconnect this social account.", { code: "REAUTHORIZATION_REQUIRED" });
+  }
+  if (row.refresh_token_expires_at && Date.parse(row.refresh_token_expires_at) <= Date.now()) {
+    throw new PublishError("The provider refresh token has expired. Reconnect this social account.", { code: "REAUTHORIZATION_REQUIRED" });
+  }
+  const claimed = await db.rpc("claim_social_token_refresh", { p_social_account_id: account.id, p_worker_id: workerId, p_stale_after_seconds: 120 });
+  if (claimed.error) throw new Error("Unable to acquire token refresh lock: " + claimed.error.message);
+  if (!claimed.data) throw new PublishError("Another worker is refreshing this account token; retry shortly.", { code: "TOKEN_REFRESH_IN_PROGRESS", retryable: true, retryAfterMs: 15000 });
+  try {
+    const current = await must(await db.from("social_account_tokens").select("*").eq("social_account_id", account.id).eq("organization_id", account.organization_id).single(), "Token lookup failed during refresh");
+    if (current.access_token_expires_at && Date.parse(current.access_token_expires_at) > Date.now() + 120000) return;
+    if (current.encryption_key_version !== configuredVersion) throw new PublishError("Stored OAuth credentials use a different encryption key version.", { code: "TOKEN_KEY_VERSION_MISMATCH" });
+    const refreshToken = decryptStoredToken(pgBytea(current.refresh_token_nonce), pgBytea(current.refresh_token_ciphertext), pgBytea(current.refresh_token_tag));
+    const clientId = account.platform === "youtube" ? process.env.GOOGLE_CLIENT_ID : process.env.LINKEDIN_CLIENT_ID;
+    const clientSecret = account.platform === "youtube" ? process.env.GOOGLE_CLIENT_SECRET : process.env.LINKEDIN_CLIENT_SECRET;
+    const tokenUrl = account.platform === "youtube" ? "https://oauth2.googleapis.com/token" : "https://www.linkedin.com/oauth/v2/accessToken";
+    if (!clientId || !clientSecret) throw new PublishError("OAuth client credentials are not configured for token refresh.", { code: "PROVIDER_NOT_CONFIGURED" });
+    const response = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: clientId, client_secret: clientSecret }),
+      signal: AbortSignal.timeout(20000),
+      cache: "no-store"
+    });
+    let result = {};
+    try { result = await response.json(); } catch { /* handled below */ }
+    if (!response.ok || !result.access_token) {
+      const invalidGrant = response.status === 400 || response.status === 401;
+      throw new PublishError(invalidGrant ? "Provider rejected the refresh token. Reconnect this account." : "OAuth token refresh failed.",
+        { code: invalidGrant ? "REAUTHORIZATION_REQUIRED" : "TOKEN_REFRESH_FAILED", retryable: !invalidGrant && (response.status === 429 || response.status >= 500), retryAfterMs: Number(response.headers.get("retry-after")) * 1000 || null });
+    }
+    const access = encryptStoredToken(result.access_token);
+    const rotatedRefresh = result.refresh_token ? encryptStoredToken(result.refresh_token) : null;
+    const updated = await db.from("social_account_tokens").update({
+      access_token_nonce: "\\\\x" + access.nonce.toString("hex"),
+      access_token_ciphertext: "\\\\x" + access.ciphertext.toString("hex"),
+      access_token_tag: "\\\\x" + access.tag.toString("hex"),
+      ...(rotatedRefresh ? {
+        refresh_token_nonce: "\\\\x" + rotatedRefresh.nonce.toString("hex"),
+        refresh_token_ciphertext: "\\\\x" + rotatedRefresh.ciphertext.toString("hex"),
+        refresh_token_tag: "\\\\x" + rotatedRefresh.tag.toString("hex")
+      } : {}),
+      access_token_expires_at: result.expires_in ? new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() : null,
+      refresh_token_expires_at: result.refresh_token_expires_in ? new Date(Date.now() + Number(result.refresh_token_expires_in) * 1000).toISOString() : current.refresh_token_expires_at,
+      token_type: result.token_type || current.token_type || "Bearer",
+      last_refreshed_at: new Date().toISOString()
+    }).eq("social_account_id", account.id).eq("organization_id", account.organization_id);
+    if (updated.error) throw new Error("Unable to persist refreshed OAuth token: " + updated.error.message);
+  } finally {
+    await db.rpc("release_social_token_refresh", { p_social_account_id: account.id, p_worker_id: workerId });
+  }
+}
 async function getToken(account) {
   const row = await must(await db.from("social_account_tokens").select("*").eq("social_account_id", account.id).eq("organization_id", account.organization_id).single(), "Encrypted credentials not found");
-  if (row.access_token_expires_at && Date.parse(row.access_token_expires_at) <= Date.now() + 60_000) {
-    await db.from("social_accounts").update({ connection_status: "reauthorization_required", last_error: "Access token expired; reconnect this account." }).eq("id", account.id);
-    throw new PublishError("Social account credentials have expired and must be refreshed by reconnecting.", { code: "REAUTHORIZATION_REQUIRED" });
+  const configuredVersion = process.env.SOCIAL_TOKEN_KEY_VERSION || "v1";
+  if (row.encryption_key_version !== configuredVersion) {
+    throw new PublishError("Stored OAuth credentials use a different encryption key version.", { code: "TOKEN_KEY_VERSION_MISMATCH" });
   }
+  if (row.access_token_expires_at && Date.parse(row.access_token_expires_at) <= Date.now() + 120_000) {
+    try {
+      await refreshProviderToken(account, row);
+    } catch (error) {
+      if (error.code === "REAUTHORIZATION_REQUIRED" || error.code === "TOKEN_KEY_VERSION_MISMATCH") {
+        await db.from("social_accounts").update({ connection_status: "reauthorization_required", last_error: error.message }).eq("id", account.id);
+      }
+      throw error;
+    }
+  }
+  const latest = await must(await db.from("social_account_tokens").select("*").eq("social_account_id", account.id).eq("organization_id", account.organization_id).single(), "Unable to reload OAuth credentials");
   try {
-    return decryptStoredToken(pgBytea(row.access_token_nonce), pgBytea(row.access_token_ciphertext), pgBytea(row.access_token_tag));
+    return decryptStoredToken(pgBytea(latest.access_token_nonce), pgBytea(latest.access_token_ciphertext), pgBytea(latest.access_token_tag));
   } catch {
     await db.from("social_accounts").update({ connection_status: "error", last_error: "Credential decryption failed." }).eq("id", account.id);
     throw new PublishError("Stored credentials could not be decrypted.", { code: "TOKEN_DECRYPTION_FAILED" });
