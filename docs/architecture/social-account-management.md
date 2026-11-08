@@ -18,7 +18,7 @@ A token expiring within seven days is displayed as expiring soon. Providers that
 
 ## Disconnect
 
-Only workspace owners, administrators and managers can disconnect an account. The server:
+Only workspace owners, administrators and managers can disconnect an account. The server invokes migration `0013_atomic_social_account_disconnect.sql` after authorization. The database performs credential deletion, account-state transition and audit insertion in one transaction. The server:
 1. authenticates the current user;
 2. confirms active manager membership in the same organization;
 3. confirms the account is visible under brand-scoped RLS and belongs to that organization;
@@ -38,4 +38,6 @@ Accounts in reauthorization-required, expired, disconnected or error states can 
 - Token metadata is returned with `Cache-Control: no-store`.
 - The dashboard does not claim that a connected account has every publishing permission. It displays granted scopes for operator review.
 - TikTok, Threads, Pinterest and X are listed as planned integrations; they are not presented as live publishing adapters.
-- The account-management API and UI have not been tested against a live SocialOS Supabase project in this change.
+- Apply migration `0013_atomic_social_account_disconnect.sql` after migrations `0001` through `0012` before using disconnect.
+
+The account-management API and UI have not been tested against a live SocialOS Supabase project in this change.
