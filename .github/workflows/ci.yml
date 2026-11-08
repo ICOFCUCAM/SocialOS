@@ -27,6 +27,8 @@ jobs:
         run: |
           node --check workers/publisher/src/worker.mjs
           node --check workers/publisher/src/provider-rate-limits.mjs
+          node --check workers/publisher/src/provider-quota-intelligence.mjs
+          node --check workers/publisher/src/errors.mjs
           node --check workers/publisher/src/content-version.mjs
           node --check workers/publisher/src/providers/index.mjs
           node --check workers/analytics-collector/src/collector.mjs
