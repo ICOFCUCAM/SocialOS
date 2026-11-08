@@ -13,7 +13,7 @@ function returnToApp(request:NextRequest,status:string) {
 }
 export async function GET(request:NextRequest) {
   const providerName=request.nextUrl.searchParams.get("provider")??"";
-  if (!["youtube","linkedin"].includes(providerName)) return returnToApp(request,"unsupported");
+  if (!["youtube","linkedin","meta"].includes(providerName)) return returnToApp(request,"unsupported");
   const provider=getProvider(providerName);
   if (!provider) return returnToApp(request,"not_configured");
   const cookieName=`social_oauth_${providerName}`;
@@ -38,16 +38,70 @@ export async function GET(request:NextRequest) {
   if (!brand) return clear(returnToApp(request,"brand_unavailable"));
 
   try {
-    const tokenResponse=await fetch(provider.tokenUrl,{
-      method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Accept":"application/json"},
-      body:new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:oauthRedirectUri(providerName),client_id:provider.clientId,client_secret:provider.clientSecret,code_verifier:signed.verifier}),
-      cache:"no-store",signal:AbortSignal.timeout(15000)
-    });
+    const tokenUrl=new URL(provider.tokenUrl);
+    const tokenRequest=providerName==="meta"
+      ? (tokenUrl.searchParams.set("client_id",provider.clientId),tokenUrl.searchParams.set("client_secret",provider.clientSecret),tokenUrl.searchParams.set("redirect_uri",oauthRedirectUri(providerName)),tokenUrl.searchParams.set("code",code),fetch(tokenUrl,{cache:"no-store",signal:AbortSignal.timeout(15000)}))
+      : fetch(tokenUrl,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Accept":"application/json"},body:new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:oauthRedirectUri(providerName),client_id:provider.clientId,client_secret:provider.clientSecret,code_verifier:signed.verifier}),cache:"no-store",signal:AbortSignal.timeout(15000)});
+    const tokenResponse=await tokenRequest;
     const tokens=await tokenResponse.json() as TokenResponse;
     if (!tokenResponse.ok || !tokens.access_token) return clear(returnToApp(request,"token_exchange_failed"));
 
     let externalId="",accountName="",picture:string|undefined;
-    if (providerName==="youtube") {
+    if (providerName==="meta") {
+      const graphVersion=process.env.META_GRAPH_API_VERSION??"v25.0";
+      const pagesUrl=new URL(`https://graph.facebook.com/${graphVersion}/me/accounts`);
+      pagesUrl.searchParams.set("fields","id,name,access_token,instagram_business_account{id,username,profile_picture_url}");
+      pagesUrl.searchParams.set("access_token",tokens.access_token);
+      const pagesResponse=await fetch(pagesUrl,{cache:"no-store",signal:AbortSignal.timeout(20000)});
+      const pageData=await pagesResponse.json() as {data?:{id:string;name:string;access_token:string;instagram_business_account?:{id:string;username?:string;profile_picture_url?:string}}[];error?:{message?:string}};
+      if (!pagesResponse.ok || !pageData.data) return clear(returnToApp(request,"meta_pages_unavailable"));
+      if (pageData.data.length===0) return clear(returnToApp(request,"meta_no_pages"));
+      const admin=createSocialAdminClient();
+      const {data:platforms,error:platformError}=await admin.from("social_platforms").select("id,code").in("code",["facebook","instagram"]);
+      if (platformError || !platforms) throw new Error("Meta platform records are missing.");
+      const platformMap=new Map(platforms.map(p=>[p.code,p.id]));
+      if (!platformMap.has("facebook")) throw new Error("Facebook platform record is missing.");
+      let saved=0;
+      for (const page of pageData.data) {
+        const pageAccount=await admin.from("social_accounts").upsert({
+          organization_id:signed.organizationId,brand_id:signed.brandId,platform_id:platformMap.get("facebook"),
+          external_account_id:page.id,account_name:page.name,account_type:"facebook_page",
+          connection_status:"connected",granted_scopes:provider.scopes,
+          last_verified_at:new Date().toISOString(),connected_by:user.id,
+          metadata:{provider:"meta",parent_page_id:page.id}
+        },{onConflict:"organization_id,platform_id,external_account_id"}).select("id").single();
+        if (pageAccount.error || !pageAccount.data) throw new Error("Unable to save Facebook Page.");
+        const pageToken=encryptToken(page.access_token);
+        const pageTokenWrite=await admin.from("social_account_tokens").upsert({
+          organization_id:signed.organizationId,social_account_id:pageAccount.data.id,
+          access_token_nonce:toPgBytea(pageToken.nonce),access_token_ciphertext:toPgBytea(pageToken.ciphertext),access_token_tag:toPgBytea(pageToken.tag),
+          encryption_algorithm:pageToken.algorithm,encryption_key_version:pageToken.keyVersion,token_type:"Bearer"
+        },{onConflict:"social_account_id"});
+        if (pageTokenWrite.error) throw new Error("Unable to store Facebook Page credentials.");
+        saved++;
+        const instagram=page.instagram_business_account;
+        if (instagram && platformMap.has("instagram")) {
+          const igAccount=await admin.from("social_accounts").upsert({
+            organization_id:signed.organizationId,brand_id:signed.brandId,platform_id:platformMap.get("instagram"),
+            external_account_id:instagram.id,account_name:instagram.username??"Instagram professional account",
+            account_username:instagram.username??null,account_type:"instagram_business",
+            profile_image_url:instagram.profile_picture_url??null,connection_status:"connected",
+            granted_scopes:provider.scopes,last_verified_at:new Date().toISOString(),connected_by:user.id,
+            metadata:{provider:"meta",parent_page_id:page.id,facebook_page_name:page.name}
+          },{onConflict:"organization_id,platform_id,external_account_id"}).select("id").single();
+          if (igAccount.error || !igAccount.data) throw new Error("Unable to save Instagram account.");
+          const igToken=encryptToken(page.access_token);
+          const igTokenWrite=await admin.from("social_account_tokens").upsert({
+            organization_id:signed.organizationId,social_account_id:igAccount.data.id,
+            access_token_nonce:toPgBytea(igToken.nonce),access_token_ciphertext:toPgBytea(igToken.ciphertext),access_token_tag:toPgBytea(igToken.tag),
+            encryption_algorithm:igToken.algorithm,encryption_key_version:igToken.keyVersion,token_type:"Bearer"
+          },{onConflict:"social_account_id"});
+          if (igTokenWrite.error) throw new Error("Unable to store Instagram credentials.");
+          saved++;
+        }
+      }
+      return clear(returnToApp(request,saved>0?"connected":"meta_no_accounts"));
+    } else if (providerName==="youtube") {
       const response=await fetch(provider.profileUrl,{headers:{Authorization:`Bearer ${tokens.access_token}`},cache:"no-store",signal:AbortSignal.timeout(15000)});
       const data=await response.json() as {items?:{id?:string;snippet?:{title?:string;thumbnails?:{default?:{url?:string}}}}[]};
       const channel=data.items?.[0];
