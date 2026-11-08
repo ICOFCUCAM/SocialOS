@@ -28,6 +28,10 @@ test("campaign readiness evaluates linked posts, targets, account and credential
   assert.match(api, /social_accounts/);
   assert.match(api, /social_account_tokens/);
   assert.match(api, /CONTENT_VERSION_MISSING/);
+  assert.match(api, /social_post_version_media/);
+  assert.match(api, /MEDIA_NOT_READY/);
+  assert.match(api, /PLATFORM_MEDIA_REQUIRED/);
+  assert.match(api, /MEDIA_RENDITION_MISSING/);
 });
 
 test("campaign readiness detects schedule window, failed delivery and missing plan", () => {
