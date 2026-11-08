@@ -22,11 +22,11 @@ export async function publishYouTube({ account, token, post, media = [] }) {
   });
   if (!start.ok) await providerJson(start, "YouTube");
   const uploadUrl = start.headers.get("location");
-  if (!uploadUrl || new URL(uploadUrl).hostname !== "youtube ולא.googleapis.com") {
-    // Google may return an upload host; validate it strictly before sending media.
-    if (!uploadUrl || !["www.googleapis.com", "youtube.googleapis.com"].includes(new URL(uploadUrl).hostname)) {
-      throw new PublishError("YouTube did not return a trusted resumable upload URL.", { code: "UPLOAD_URL_INVALID" });
-    }
+  // Validate the resumable endpoint before forwarding OAuth credentials or media bytes.
+  let uploadHost = "";
+  try { uploadHost = new URL(uploadUrl).hostname; } catch { /* rejected below */ }
+  if (!uploadUrl || !["www.googleapis.com", "youtube.googleapis.com"].includes(uploadHost)) {
+    throw new PublishError("YouTube did not return a trusted resumable upload URL.", { code: "UPLOAD_URL_INVALID" });
   }
   let response;
   try {
