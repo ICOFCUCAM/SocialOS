@@ -141,6 +141,8 @@ export async function GET(request:NextRequest) {
       refresh_token_nonce:refresh?toPgBytea(refresh.nonce):null,refresh_token_ciphertext:refresh?toPgBytea(refresh.ciphertext):null,refresh_token_tag:refresh?toPgBytea(refresh.tag):null,
       encryption_algorithm:access.algorithm,encryption_key_version:access.keyVersion,
       access_token_expires_at:tokens.expires_in?new Date(Date.now()+tokens.expires_in*1000).toISOString():null,
+      refresh_token_expires_at:tokens.refresh_token_expires_in?new Date(Date.now()+tokens.refresh_token_expires_in*1000).toISOString():null,
+      last_refreshed_at:new Date().toISOString(),
       token_type:"Bearer"
     },{onConflict:"social_account_id"});
     if (tokenError) {
