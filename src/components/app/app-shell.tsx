@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
 import {
   Activity, BarChart3, CalendarDays, ChevronDown, CircleHelp, Command,
-  CreditCard, FolderKanban, LayoutDashboard, MessageSquare, Plus,
+  FolderKanban, LayoutDashboard, MessageSquare,
   Settings2, Sparkles, Users2, Video, type LucideIcon
 } from "lucide-react";
 
