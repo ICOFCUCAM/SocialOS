@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
   const scheduledAt = typeof input.scheduledAt === "string" ? input.scheduledAt : null;
   const targetAccountIds = Array.isArray(input.targetAccountIds) ? input.targetAccountIds : [];
   const assetIds = Array.isArray(input.assetIds) ? input.assetIds : [];
+  const accountVersions = Array.isArray(input.accountVersions) ? input.accountVersions : [];
 
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!uuid.test(organizationId) || !uuid.test(brandId)) {
@@ -39,6 +40,22 @@ export async function POST(request: NextRequest) {
       !targetAccountIds.every((id) => typeof id === "string" && uuid.test(id))) {
     return NextResponse.json({ error: "Select between 1 and 20 valid destination accounts." }, { status: 400 });
   }
+  if (accountVersions.length > 20 || !accountVersions.every((item) => item && typeof item === "object" && !Array.isArray(item))) {
+    return NextResponse.json({ error: "Account-specific versions are invalid." }, { status: 400 });
+  }
+  const versionAccountIds = accountVersions.map((item) => (item as Record<string, unknown>).accountId);
+  if (new Set(versionAccountIds).size !== versionAccountIds.length || versionAccountIds.some((id) => typeof id !== "string" || !targetAccountIds.includes(id))) {
+    return NextResponse.json({ error: "Each account version must target one selected account exactly once." }, { status: 400 });
+  }
+  for (const item of accountVersions as Record<string, unknown>[]) {
+    if (typeof item.body !== "string" || item.body.length > 20000 ||
+        (item.assetIds !== undefined && (!Array.isArray(item.assetIds) || item.assetIds.length > 20 || !item.assetIds.every((id) => typeof id === "string" && uuid.test(id))))) {
+      return NextResponse.json({ error: "Account-specific copy or media selection is invalid." }, { status: 400 });
+    }
+    if (item.platformOptions !== undefined && (!item.platformOptions || typeof item.platformOptions !== "object" || Array.isArray(item.platformOptions))) {
+      return NextResponse.json({ error: "Platform options must be an object." }, { status: 400 });
+    }
+  }
   if (assetIds.length > 20 || !assetIds.every((id) => typeof id === "string" && uuid.test(id))) {
     return NextResponse.json({ error: "Media asset selection is invalid." }, { status: 400 });
   }
@@ -49,7 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Timezone value is invalid." }, { status: 400 });
   }
 
-  const { data: postId, error } = await supabase.rpc("create_social_post_bundle", {
+  const { data: postId, error } = await supabase.rpc("create_social_post_bundle_with_versions", {
     p_payload: {
       organization_id: organizationId,
       brand_id: brandId,
@@ -59,6 +76,12 @@ export async function POST(request: NextRequest) {
       scheduled_at: scheduledAt,
       target_account_ids: targetAccountIds,
       asset_ids: assetIds,
+      account_versions: (accountVersions as Record<string, unknown>[]).map((item) => ({
+        account_id: item.accountId,
+        body: item.body,
+        asset_ids: item.assetIds ?? assetIds,
+        platform_options: item.platformOptions ?? {},
+      })),
     },
   });
 
