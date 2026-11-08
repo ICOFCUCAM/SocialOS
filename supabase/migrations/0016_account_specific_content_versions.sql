@@ -130,6 +130,7 @@ declare
   v_item jsonb;
   v_asset_id uuid;
   v_account_id uuid;
+  v_target_id uuid;
   v_position integer;
   v_body text;
   v_options jsonb;
@@ -154,6 +155,10 @@ begin
   end if;
   if jsonb_array_length(coalesce(p_payload->'account_versions','[]'::jsonb)) > 20 then
     raise exception 'At most 20 account versions are allowed' using errcode='22023';
+  end if;
+  if jsonb_typeof(coalesce(p_payload->'target_account_ids','[]'::jsonb))<>'array'
+     or jsonb_typeof(coalesce(p_payload->'asset_ids','[]'::jsonb))<>'array' then
+    raise exception 'Destinations and media must be arrays' using errcode='22023';
   end if;
 
   -- This function is called inside the same PostgreSQL transaction.
@@ -217,6 +222,10 @@ begin
     insert into public.social_post_media(organization_id,post_id,asset_id,position)
     values(v_org_id,v_post_id,v_asset_id,(select count(*) from public.social_post_media where post_id=v_post_id));
   end loop;
+  if exists(select 1 from jsonb_array_elements_text(coalesce(p_payload->'target_account_ids','[]'::jsonb)) x
+    group by x having count(*)>1) then
+    raise exception 'Duplicate destination accounts are not allowed' using errcode='22023';
+  end if;
   for v_item in select value from jsonb_array_elements(coalesce(p_payload->'target_account_ids','[]'::jsonb))
   loop
     v_account_id := (v_item#>>'{}')::uuid;
