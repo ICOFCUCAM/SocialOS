@@ -103,5 +103,10 @@ export async function deferProviderCapacity(scope, retryAfterMs) {
 }
 
 export async function closeProviderRateLimiter() {
-  if (redisClient) await redisClient.quit();
+  if (!redisClient) return;
+  if (redisClient.status === "wait" || redisClient.status === "end") {
+    redisClient.disconnect();
+    return;
+  }
+  await redisClient.quit();
 }
