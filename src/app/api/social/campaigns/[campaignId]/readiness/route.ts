@@ -42,7 +42,7 @@ export async function GET(_request:NextRequest,{params}:{params:Promise<{campaig
  const accountIds=[...new Set(targetRows.map(t=>t.social_account_id))];
  const [{data:accounts,error:accountsError},{data:versions,error:versionsError}]=await Promise.all([
   accountIds.length?supabase.from("social_accounts").select("id,account_name,connection_status,platform:social_platforms(code,name,is_enabled)").eq("organization_id",campaign.organization_id).in("id",accountIds):Promise.resolve({data:[],error:null}),
-  postIds.length?supabase.from("social_post_versions").select("post_id,social_account_id,is_default").eq("organization_id",campaign.organization_id).in("post_id",postIds):Promise.resolve({data:[],error:null})
+  postIds.length?supabase.from("social_post_versions").select("id,post_id,social_account_id,is_default").eq("organization_id",campaign.organization_id).in("post_id",postIds):Promise.resolve({data:[],error:null})
  ]);
  if(accountsError||versionsError)return NextResponse.json({error:"Unable to inspect campaign destinations."},{status:500});
  const accountMap=new Map((accounts??[]).map(a=>[a.id,a]));
@@ -50,6 +50,17 @@ export async function GET(_request:NextRequest,{params}:{params:Promise<{campaig
  const {data:tokens,error:tokenError}=accountIds.length?await admin.from("social_account_tokens").select("social_account_id,access_token_expires_at").eq("organization_id",campaign.organization_id).in("social_account_id",accountIds):{data:[],error:null};
  if(tokenError)return NextResponse.json({error:"Unable to inspect credential metadata."},{status:500});
  const tokenMap=new Map((tokens??[]).map(t=>[t.social_account_id,t]));
+ const versionIds=(versions??[]).map(v=>v.id);
+ const {data:versionMedia,error:versionMediaError}=versionIds.length?await supabase.from("social_post_version_media")
+  .select("version_id,asset_id,position").eq("organization_id",campaign.organization_id).in("version_id",versionIds):{data:[],error:null};
+ if(versionMediaError)return NextResponse.json({error:"Unable to inspect campaign media versions."},{status:500});
+ const assetIds=[...new Set((versionMedia??[]).map(m=>m.asset_id))];
+ const {data:mediaAssets,error:mediaAssetsError}=assetIds.length?await supabase.from("social_media_assets")
+  .select("id,processing_status,metadata,mime_type").eq("organization_id",campaign.organization_id).in("id",assetIds):{data:[],error:null};
+ if(mediaAssetsError)return NextResponse.json({error:"Unable to inspect campaign media assets."},{status:500});
+ const assetMap=new Map((mediaAssets??[]).map(a=>[a.id,a]));
+ const mediaByVersion=new Map<string,typeof versionMedia>();
+ for(const media of versionMedia??[])mediaByVersion.set(media.version_id,[...(mediaByVersion.get(media.version_id)??[]),media]);
  const postSummaries=postRows.map(post=>{
   const ownTargets=targetRows.filter(t=>t.post_id===post.id);
   const postFindings:Finding[]=[];
@@ -69,8 +80,22 @@ export async function GET(_request:NextRequest,{params}:{params:Promise<{campaig
    else if(expiry===null||!Number.isFinite(expiry)||expiry<=now.getTime()+24*60*60*1000)postFindings.push({code:"CREDENTIAL_EXPIRY_WARNING",severity:"warning",title:"Credential expiry needs review",detail:"The token expiry is unknown or within 24 hours.",postId:post.id,accountId:target.social_account_id});
    if(target.status==="failed")postFindings.push({code:"DESTINATION_FAILED",severity:"blocker",title:"Destination delivery failed",detail:target.last_error_code||"Review this destination's publishing error.",postId:post.id,accountId:target.social_account_id});
    if(target.status==="queued"||target.status==="pending")postFindings.push({code:"DESTINATION_PENDING",severity:"info",title:"Destination awaiting delivery",detail:"This destination has not completed publication.",postId:post.id,accountId:target.social_account_id});
-   const hasVersion=(versions??[]).some(v=>v.post_id===post.id&&(v.is_default||v.social_account_id===target.social_account_id));
-   if(!hasVersion)postFindings.push({code:"CONTENT_VERSION_MISSING",severity:"blocker",title:"Content version missing",detail:"This destination has no account-specific version or shared fallback.",postId:post.id,accountId:target.social_account_id});
+   const version=(versions??[]).find(v=>v.post_id===post.id&&!v.is_default&&v.social_account_id===target.social_account_id)??(versions??[]).find(v=>v.post_id===post.id&&v.is_default);
+   if(!version)postFindings.push({code:"CONTENT_VERSION_MISSING",severity:"blocker",title:"Content version missing",detail:"This destination has no account-specific version or shared fallback.",postId:post.id,accountId:target.social_account_id});
+   const selectedMedia=version?(mediaByVersion.get(version.id)??[]):[];
+   const mediaRows=selectedMedia.map(m=>assetMap.get(m.asset_id)).filter(Boolean);
+   for(const media of mediaRows){
+    if(media.processing_status!=="ready")postFindings.push({code:"MEDIA_NOT_READY",severity:"blocker",title:"Media processing incomplete",detail:"A selected media asset is not ready.",postId:post.id,accountId:target.social_account_id});
+    const processing=(media.metadata as Record<string,unknown>|null)?.processing as {kind?:string;derivatives?:{profile?:string;objectKey?:string}[]}|undefined;
+    const kind=processing?.kind??(media.mime_type?.startsWith("video/")?"video":media.mime_type?.startsWith("image/")?"image":"unknown");
+    if(!["image","video"].includes(kind))postFindings.push({code:"MEDIA_TYPE_UNKNOWN",severity:"warning",title:"Media type unknown",detail:"The selected asset type could not be verified.",postId:post.id,accountId:target.social_account_id});
+    if(platform?.code==="youtube"&&kind!=="video")postFindings.push({code:"YOUTUBE_VIDEO_REQUIRED",severity:"blocker",title:"YouTube requires video",detail:"The selected version contains a non-video asset.",postId:post.id,accountId:target.social_account_id});
+    if(platform?.code==="instagram"&&mediaRows.length>1)postFindings.push({code:"INSTAGRAM_MEDIA_COUNT",severity:"blocker",title:"Too many Instagram media items",detail:"The current Instagram adapter supports one media item per publish job.",postId:post.id,accountId:target.social_account_id});
+    if(platform?.code==="linkedin")postFindings.push({code:"LINKEDIN_MEDIA_UNSUPPORTED",severity:"blocker",title:"LinkedIn media unsupported",detail:"The currently registered LinkedIn adapter rejects media attachments.",postId:post.id,accountId:target.social_account_id});
+    const required=kind==="video"?(["youtube","linkedin"].includes(platform?.code??"")?"landscape":"vertical"):(platform?.code==="youtube"||platform?.code==="linkedin"?"landscape":platform?.code==="pinterest"?"pin":platform?.code==="threads"?"square":"portrait");
+    if(processing?.derivatives&&!processing.derivatives.some(d=>d.profile===required&&d.objectKey))postFindings.push({code:"MEDIA_RENDITION_MISSING",severity:"blocker",title:"Required media rendition missing",detail:"The "+required+" rendition is not available.",postId:post.id,accountId:target.social_account_id});
+   }
+   if(["instagram","youtube"].includes(platform?.code??"")&&mediaRows.length===0)postFindings.push({code:"PLATFORM_MEDIA_REQUIRED",severity:"blocker",title:"Media required",detail:"This publishing destination requires media.",postId:post.id,accountId:target.social_account_id});
   }
   return {postId:post.id,title:post.title,status:post.status,destinations:ownTargets.length,findings:postFindings,status:postFindings.some(f=>f.severity==="blocker")?"blocked":postFindings.some(f=>f.severity==="warning")?"review":"ready"};
  });
