@@ -46,3 +46,21 @@ Known retryable failures use the authenticated `/api/social/publishing/operation
 For `PUBLISH_OUTCOME_UNKNOWN`, publishers with the required workspace role can open a reconciliation form. The operator must first verify the post on the destination platform and enter its actual external post ID; the optional permalink is stored with the target. The database function performs the state transition and audit write.
 
 The dashboard uses the active workspace membership selected by the current application shell. Multi-workspace switching and account-level role resolution remain separate follow-up work; do not assume this page currently offers a workspace selector.
+
+
+## Pre-publish readiness assessment
+
+`POST /api/social/publishing/readiness` accepts a post ID and assesses each destination independently using the current saved post versions.
+
+Checks include:
+- Whether SocialOS has a publishing adapter for the destination and the platform is enabled.
+- Whether the account remains connected and an encrypted credential record exists.
+- Access-token expiry, including a warning when expiry is unknown or within 24 hours.
+- Whether the destination-specific version or shared fallback exists.
+- Whether selected media is ready, its type is supported by the current adapter, and required processed renditions exist.
+- Whether a platform-required media asset is present.
+- Whether the scheduled delivery time is still in the future.
+
+The response classifies each destination as ready, review or blocked and returns blocker, warning and informational findings. The content calendar exposes a per-post assessment control so a user can inspect readiness before relying on a scheduled campaign.
+
+This assessment is a snapshot, not a guarantee. It does not reserve provider quota, test provider uptime, predict future API changes, or guarantee acceptance at delivery time. Provider cooldowns and quotas remain enforced by the publishing worker. It currently assesses saved posts; unsaved composer state is not included. The readiness endpoint does not schedule, mutate or publish a post.
