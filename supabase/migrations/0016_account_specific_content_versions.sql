@@ -73,6 +73,44 @@ revoke insert,update,delete on public.social_post_versions,public.social_post_ve
 grant select on public.social_post_versions,public.social_post_version_media to authenticated;
 grant all on public.social_post_versions,public.social_post_version_media to service_role;
 
+-- Backfill every existing post before switching API/worker reads.
+insert into public.social_post_versions(
+  organization_id,post_id,social_account_id,is_default,title,body,platform_options
+)
+select p.organization_id,p.id,null,true,p.title,p.body,'{}'::jsonb
+from public.social_posts p
+where not exists(select 1 from public.social_post_versions v
+  where v.post_id=p.id and v.is_default);
+
+insert into public.social_post_version_media(organization_id,version_id,asset_id,position,alt_text)
+select m.organization_id,v.id,m.asset_id,m.position,m.alt_text
+from public.social_post_media m
+join public.social_post_versions v on v.post_id=m.post_id
+  and v.organization_id=m.organization_id and v.is_default
+on conflict do nothing;
+
+-- Preserve legacy target overrides as account-specific versions.
+insert into public.social_post_versions(
+  organization_id,post_id,social_account_id,is_default,title,body,platform_options
+)
+select t.organization_id,t.post_id,t.social_account_id,false,p.title,
+  coalesce(t.caption_override,p.body),coalesce(t.platform_options,'{}'::jsonb)
+from public.social_post_targets t
+join public.social_posts p on p.id=t.post_id and p.organization_id=t.organization_id
+where (t.caption_override is not null or t.platform_options<>'{}'::jsonb)
+  and not exists(select 1 from public.social_post_versions v
+    where v.post_id=t.post_id and v.social_account_id=t.social_account_id);
+
+insert into public.social_post_version_media(organization_id,version_id,asset_id,position,alt_text)
+select m.organization_id,v.id,m.asset_id,m.position,m.alt_text
+from public.social_post_media m
+join public.social_post_versions v on v.post_id=m.post_id
+  and v.organization_id=m.organization_id
+  and (v.is_default or exists(select 1 from public.social_post_targets t
+    where t.post_id=v.post_id and t.organization_id=v.organization_id
+      and t.social_account_id=v.social_account_id))
+on conflict do nothing;
+
 -- Preserve the existing atomic post/target/outbox transaction, then add versions
 -- before commit so a scheduled worker can never observe an unversioned post.
 create or replace function public.create_social_post_bundle_with_versions(p_payload jsonb)
