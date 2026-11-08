@@ -64,3 +64,19 @@ Checks include:
 The response classifies each destination as ready, review or blocked and returns blocker, warning and informational findings. The content calendar exposes a per-post assessment control so a user can inspect readiness before relying on a scheduled campaign.
 
 This assessment is a snapshot, not a guarantee. It does not reserve provider quota, test provider uptime, predict future API changes, or guarantee acceptance at delivery time. Provider cooldowns and quotas remain enforced by the publishing worker. It currently assesses saved posts; unsaved composer state is not included. The readiness endpoint does not schedule, mutate or publish a post.
+
+
+## Campaign-wide readiness orchestration
+
+The campaign detail page now provides an on-demand campaign readiness assessment through `GET /api/social/campaigns/[campaignId]/readiness`.
+
+The endpoint:
+- Authenticates the caller and scopes campaign, post, target, account, token metadata and media queries to the campaign's organization.
+- Assesses every linked post and its publishing destinations, rather than treating the campaign as one undifferentiated publishing job.
+- Checks campaign start/end window, missing posts, unscheduled posts, destination failures and pending delivery.
+- Checks each destination's provider adapter, platform enablement, account connection and access-token expiry.
+- Resolves the account-specific content version with the shared default fallback.
+- Checks version-specific media processing state, media kind, platform media requirements and available processed renditions.
+- Returns campaign-level ready/review/blocked status, summary counts and post-by-post findings.
+
+The UI is an explicit snapshot action. It does not change campaign state, publish posts, schedule work or reserve provider quota. Re-run after editing campaign dates, posts, media or connected accounts. It does not guarantee provider acceptance at a later delivery time.
