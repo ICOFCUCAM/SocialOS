@@ -95,6 +95,11 @@ begin
   if not private.can_access_brand(v_brand,v_org) then
     raise exception 'Brand access required' using errcode='42501';
   end if;
+  if v_role not in ('owner','administrator','manager') and not exists(
+    select 1 from public.brand_members bm
+    where bm.organization_id=v_org and bm.brand_id=v_brand and bm.user_id=v_user
+      and bm.role in ('manager','editor','publisher')
+  ) then raise exception 'Brand campaign permission required' using errcode='42501'; end if;
   if not exists(select 1 from public.brands where id=v_brand and organization_id=v_org and is_active) then
     raise exception 'Active brand not found' using errcode='42501';
   end if;
@@ -109,6 +114,13 @@ begin
   if cardinality(v_pillars)>20 or cardinality(v_channels)>8
     or jsonb_typeof(v_metrics)<>'array' or jsonb_array_length(v_metrics)>10 then
     raise exception 'Campaign planning list exceeds limits' using errcode='22023';
+  end if;
+  if exists(select 1 from unnest(v_pillars) p where length(p)>120)
+    or exists(select 1 from unnest(v_channels) ch where ch not in ('instagram','facebook','youtube','linkedin','threads','pinterest','tiktok','x'))
+    or exists(select 1 from jsonb_array_elements(v_metrics) m
+      where jsonb_typeof(m)<>'object' or length(coalesce(m->>'name',''))>80
+        or length(coalesce(m->>'target',''))>80 or length(coalesce(m->>'unit',''))>30) then
+    raise exception 'Campaign planning values are invalid' using errcode='22023';
   end if;
   if v_start is not null and v_end is not null and v_end<v_start then
     raise exception 'Campaign end date must not precede its start date' using errcode='22023';
@@ -153,7 +165,12 @@ begin
   select role into v_role from public.organization_members
     where organization_id=v_campaign.organization_id and user_id=v_user and status='active';
   if v_role not in ('owner','administrator','manager','editor','publisher')
-    or not private.can_access_brand(v_campaign.brand_id,v_campaign.organization_id) then
+    or not private.can_access_brand(v_campaign.brand_id,v_campaign.organization_id)
+    or (v_role not in ('owner','administrator','manager') and not exists(
+      select 1 from public.brand_members bm
+      where bm.organization_id=v_campaign.organization_id and bm.brand_id=v_campaign.brand_id
+        and bm.user_id=v_user and bm.role in ('manager','editor','publisher')
+    )) then
     raise exception 'Campaign edit permission required' using errcode='42501';
   end if;
   if length(trim(coalesce(p_payload->>'name',''))) not between 2 and 160
@@ -165,6 +182,13 @@ begin
     or cardinality(v_pillars)>20 or cardinality(v_channels)>8
     or jsonb_typeof(v_metrics)<>'array' or jsonb_array_length(v_metrics)>10 then
     raise exception 'Campaign field value exceeds limits' using errcode='22023';
+  end if;
+  if exists(select 1 from unnest(v_pillars) p where length(p)>120)
+    or exists(select 1 from unnest(v_channels) ch where ch not in ('instagram','facebook','youtube','linkedin','threads','pinterest','tiktok','x'))
+    or exists(select 1 from jsonb_array_elements(v_metrics) m
+      where jsonb_typeof(m)<>'object' or length(coalesce(m->>'name',''))>80
+        or length(coalesce(m->>'target',''))>80 or length(coalesce(m->>'unit',''))>30) then
+    raise exception 'Campaign planning values are invalid' using errcode='22023';
   end if;
   if v_start is not null and v_end is not null and v_end<v_start then
     raise exception 'Campaign end date must not precede its start date' using errcode='22023';
@@ -203,7 +227,12 @@ begin
   select role into v_role from public.organization_members
     where organization_id=v_campaign.organization_id and user_id=v_user and status='active';
   if v_role not in ('owner','administrator','manager','editor','publisher')
-    or not private.can_access_brand(v_campaign.brand_id,v_campaign.organization_id) then
+    or not private.can_access_brand(v_campaign.brand_id,v_campaign.organization_id)
+    or (v_role not in ('owner','administrator','manager') and not exists(
+      select 1 from public.brand_members bm
+      where bm.organization_id=v_campaign.organization_id and bm.brand_id=v_campaign.brand_id
+        and bm.user_id=v_user and bm.role in ('manager','editor','publisher')
+    )) then
     raise exception 'Campaign edit permission required' using errcode='42501';
   end if;
   insert into public.social_campaign_posts(organization_id,campaign_id,post_id,added_by)
