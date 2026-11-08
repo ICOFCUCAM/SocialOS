@@ -4,10 +4,10 @@ const METRICS = [
   ["REACTION", "likes"],
   ["COMMENT", "comments"],
   ["RESHARE", "shares"],
-  ["POST_SAVE", "saves"],
-  ["LINK_CLICKS", "clicks"],
-  ["FOLLOWER_GAINED_FROM_CONTENT", "followers_gained"],
-  ["PROFILE_VIEW_FROM_CONTENT", "profile_visits"]
+  ["POST_SAVE", "saves", true],
+  ["LINK_CLICKS", "clicks", true],
+  ["FOLLOWER_GAINED_FROM_CONTENT", "followers_gained", true],
+  ["PROFILE_VIEW_FROM_CONTENT", "profile_visits", true]
 ];
 
 function apiVersion() {
@@ -63,12 +63,12 @@ async function queryMetric(urn, metric, token, fetchImpl) {
 export async function collectLinkedInInsights(target, token, fetchImpl = fetch, pause = async () => {}) {
   const metrics = {};
   let successful = 0;
-  for (const [metric, field] of METRICS) {
+  for (const [metric, field, optional = false] of METRICS) {
     try {
       metrics[field] = await queryMetric(target.platform_post_id, metric, token, fetchImpl);
       if (metrics[field] !== null) successful++;
     } catch (error) {
-      if (error.unsupportedMetric) {
+      if (error.unsupportedMetric && optional) {
         metrics[field] = null;
         continue;
       }
