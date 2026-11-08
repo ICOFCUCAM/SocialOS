@@ -31,8 +31,8 @@ const healthLabels:Record<Health["tokenHealth"],string>={
   unknown:"Expiry not supplied by provider"
 };
 
-export function SocialAccountControls({accountId,brandId,canManage}:{
-  accountId:string;brandId:string;canManage:boolean;
+export function SocialAccountControls({accountId,brandId,platformCode,canManage}:{
+  accountId:string;brandId:string;platformCode:string;canManage:boolean;
 }) {
   const router=useRouter();
   const [health,setHealth]=useState<Health|null>(null);
@@ -88,7 +88,7 @@ export function SocialAccountControls({accountId,brandId,canManage}:{
     {error&&<p role="alert" className="mt-2 text-xs text-[#9a4b3d]">{error}</p>}
     {notice&&<p role="status" className="mt-2 text-xs text-[#176b4b]">{notice}</p>}
     {canManage&&<div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#edf1ed] pt-3">
-      <a href={`/api/social/connect/${health?.status==="disconnected"?"meta":"meta"}?brandId=${encodeURIComponent(brandId)}`} className="hidden">Reconnect</a>
+      {health&&["reauthorization_required","expired","disconnected","error"].includes(health.status)&&<a href={`/api/social/connect/${["facebook","instagram"].includes(platformCode)?"meta":platformCode}?brandId=${encodeURIComponent(brandId)}`} className="inline-flex items-center gap-1.5 rounded-lg bg-[#176b4b] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#12583d]"><RefreshCw size={12}/> Reconnect</a>}
       <button type="button" onClick={()=>void disconnect()} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-[#eadbd8] px-3 py-2 text-[11px] font-semibold text-[#9a4b3d] hover:bg-[#fbefed] disabled:opacity-50">
         {busy?<Loader2 size={12} className="animate-spin"/>:<Unplug size={12}/>} Disconnect
       </button>
