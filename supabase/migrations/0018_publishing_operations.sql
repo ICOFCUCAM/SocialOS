@@ -47,7 +47,7 @@ returns table (
   retry_count bigint,
   dead_letter_count bigint,
   succeeded_24h bigint,
-  failed_24h bigint,
+  dead_lettered_24h bigint,
   oldest_due_at timestamptz
 )
 language plpgsql
