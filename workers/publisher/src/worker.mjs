@@ -265,7 +265,7 @@ async function handleJob(job) {
       ? (process.env.META_APP_ID || process.env.META_CLIENT_ID)
       : context.account.platform === "youtube" ? process.env.GOOGLE_CLIENT_ID
       : context.account.platform === "linkedin" ? process.env.LINKEDIN_CLIENT_ID : "default";
-    rateLimitScope = { platform: context.account.platform, accountId: context.account.id, appId: appId || "default" };
+    rateLimitScope = { platform: context.account.platform, accountId: context.account.id, appId: appId || "default", businessId: context.account.metadata?.business_id || context.account.provider_metadata?.business_id || null };
     target = context.target;
     if (target.status === "published" || target.platform_post_id) {
       await must(await db.from("publish_jobs").update({ status: "succeeded", locked_at: null, locked_by: null, completed_at: new Date().toISOString() }).eq("id", job.id), "Unable to close already-published job");
