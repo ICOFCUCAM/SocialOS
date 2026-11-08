@@ -12,7 +12,7 @@ export function getProvider(provider: string): ProviderConfig | null {
     if (!clientId || !clientSecret) return null;
     return {clientId,clientSecret,authorizeUrl:`https://www.facebook.com/${process.env.META_GRAPH_API_VERSION??"v25.0"}/dialog/oauth`,
       tokenUrl:`https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION??"v25.0"}/oauth/access_token`,profileUrl:`https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION??"v25.0"}/me`,
-      scopes:["pages_show_list","pages_read_engagement","pages_manage_posts","instagram_basic","instagram_content_publish"],
+      scopes:["pages_show_list","pages_read_engagement","pages_manage_posts","read_insights","instagram_basic","instagram_manage_insights","instagram_content_publish"],
       name:"Meta",platformCode:"facebook"};
   }
   if (provider === "youtube") {
