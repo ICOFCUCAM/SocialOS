@@ -65,22 +65,29 @@ export function verifyOAuthState(cookie:string,expectedState:string,provider:Pro
 }
 export function createPkceVerifier() { return randomBytes(32).toString("base64url"); }
 export function createPkceChallenge(verifier:string) { return createHash("sha256").update(verifier).digest("base64url"); }
-function encryptionKey() {
-  const raw=process.env.SOCIAL_TOKEN_ENCRYPTION_KEY;
-  if (!raw) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");
+function encryptionKey(version:string) {
+  const current=process.env.SOCIAL_TOKEN_KEY_VERSION??"v1";
+  let keys:Record<string,string>={};
+  if (process.env.SOCIAL_TOKEN_ENCRYPTION_KEYS) {
+    try { keys=JSON.parse(process.env.SOCIAL_TOKEN_ENCRYPTION_KEYS) as Record<string,string>; }
+    catch { throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEYS must be a JSON object mapping key versions to base64 keys."); }
+  }
+  const raw=keys[version]??(version===current?process.env.SOCIAL_TOKEN_ENCRYPTION_KEY:undefined);
+  if (!raw) throw new Error("OAuth encryption key version is not configured: "+version);
   const key=Buffer.from(raw,"base64");
-  if (key.length!==32) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");
+  if (key.length!==32) throw new Error("OAuth encryption keys must be base64-encoded 32-byte values.");
   return key;
 }
 export function encryptToken(token:string) {
+  const keyVersion=process.env.SOCIAL_TOKEN_KEY_VERSION??"v1";
   const nonce=randomBytes(12);
-  const cipher=createCipheriv("aes-256-gcm",encryptionKey(),nonce);
+  const cipher=createCipheriv("aes-256-gcm",encryptionKey(keyVersion),nonce);
   const ciphertext=Buffer.concat([cipher.update(token,"utf8"),cipher.final()]);
-  return {nonce,ciphertext,tag:cipher.getAuthTag(),algorithm:"AES-256-GCM",keyVersion:process.env.SOCIAL_TOKEN_KEY_VERSION??"v1"};
+  return {nonce,ciphertext,tag:cipher.getAuthTag(),algorithm:"AES-256-GCM",keyVersion};
 }
 export function toPgBytea(value:Buffer) { return `\\x${value.toString("hex")}`; }
-export function decryptToken(nonce:Buffer,ciphertext:Buffer,tag:Buffer) {
-  const decipher=createDecipheriv("aes-256-gcm",encryptionKey(),nonce);
+export function decryptToken(nonce:Buffer,ciphertext:Buffer,tag:Buffer,keyVersion:string) {
+  const decipher=createDecipheriv("aes-256-gcm",encryptionKey(keyVersion),nonce);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ciphertext),decipher.final()]).toString("utf8");
 }
