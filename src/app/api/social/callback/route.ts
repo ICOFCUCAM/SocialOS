@@ -140,14 +140,14 @@ export async function GET(request:NextRequest) {
     },{onConflict:"organization_id,platform_id,external_account_id"}).select("id").single();
     if (accountError || !account) throw new Error("Unable to save connected account.");
     const access=encryptToken(tokens.access_token);
+    const {data:previousTokens,error:previousTokenError}=await admin.from("social_account_tokens").select("refresh_token_nonce,refresh_token_ciphertext,refresh_token_tag,refresh_token_expires_at,encryption_key_version")
+      .eq("social_account_id",account.id).eq("organization_id",signed.organizationId).maybeSingle();
+    if (previousTokenError) throw new Error("Unable to inspect existing OAuth refresh credentials.");
     const refresh=tokens.refresh_token
       ? encryptToken(tokens.refresh_token)
       : previousTokens?.refresh_token_ciphertext
         ? encryptToken(decryptToken(fromPgBytea(previousTokens.refresh_token_nonce),fromPgBytea(previousTokens.refresh_token_ciphertext),fromPgBytea(previousTokens.refresh_token_tag),previousTokens.encryption_key_version))
         : null;
-    const {data:previousTokens,error:previousTokenError}=await admin.from("social_account_tokens").select("refresh_token_nonce,refresh_token_ciphertext,refresh_token_tag,refresh_token_expires_at,encryption_key_version")
-      .eq("social_account_id",account.id).eq("organization_id",signed.organizationId).maybeSingle();
-    if (previousTokenError) throw new Error("Unable to inspect existing OAuth refresh credentials.");
     const {error:tokenError}=await admin.from("social_account_tokens").upsert({
       organization_id:signed.organizationId,social_account_id:account.id,
       access_token_nonce:toPgBytea(access.nonce),access_token_ciphertext:toPgBytea(access.ciphertext),access_token_tag:toPgBytea(access.tag),
