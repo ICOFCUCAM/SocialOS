@@ -21,7 +21,7 @@ const adapters = {
   }),
   youtube: Object.freeze({
     key: "youtube",
-    capabilities: Object.freeze({ textOnly: false, caption: false, allowedMediaKinds: Object.freeze(["video"]), requiresMedia: true, maxMediaItems: 1, maxTextLength: null }),
+    capabilities: Object.freeze({ textOnly: false, caption: true, allowedMediaKinds: Object.freeze(["video"]), requiresMedia: true, maxMediaItems: 1, maxTextLength: null }),
     publish: publishYouTube
   }),
   linkedin: Object.freeze({
@@ -99,5 +99,7 @@ function validatePublishInput(input) {
 export async function publishTarget(input) {
   validatePublishInput(input);
   const adapter = getProviderAdapter(input.account.platform);
-  return adapter.publish({ ...input, media: input.media || [] });
+  const media = input.media || [];
+  validateContentForProvider(input.account.platform, input.post, media);
+  return adapter.publish({ ...input, media });
 }
