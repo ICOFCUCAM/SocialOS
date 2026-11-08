@@ -94,7 +94,7 @@ begin
       -- This can occur if a row was locked by a recovery/maintenance process.
       -- Mark the workspace cursor so another workspace can be considered.
       insert into public.publish_organization_fairness(organization_id,last_claimed_at,updated_at)
-      values(v_org_id,now(),now())
+      values(v_org_id,clock_timestamp(),clock_timestamp())
       on conflict(organization_id) do update
         set last_claimed_at=excluded.last_claimed_at,updated_at=excluded.updated_at;
       continue;
@@ -107,7 +107,7 @@ begin
     returning * into v_claimed;
 
     insert into public.publish_organization_fairness(organization_id,last_claimed_at,updated_at)
-    values(v_org_id,now(),now())
+    values(v_org_id,clock_timestamp(),clock_timestamp())
     on conflict(organization_id) do update
       set last_claimed_at=excluded.last_claimed_at,updated_at=excluded.updated_at;
 
