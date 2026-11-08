@@ -117,9 +117,9 @@ begin
   end if;
   if exists(select 1 from unnest(v_pillars) p where length(p)>120)
     or exists(select 1 from unnest(v_channels) ch where ch not in ('instagram','facebook','youtube','linkedin','threads','pinterest','tiktok','x'))
-    or exists(select 1 from jsonb_array_elements(v_metrics) m
-      where jsonb_typeof(m)<>'object' or length(coalesce(m->>'name',''))>80
-        or length(coalesce(m->>'target',''))>80 or length(coalesce(m->>'unit',''))>30) then
+    or exists(select 1 from jsonb_array_elements(v_metrics) as item(value)
+      where jsonb_typeof(item.value)<>'object' or length(coalesce(item.value->>'name',''))>80
+        or length(coalesce(item.value->>'target',''))>80 or length(coalesce(item.value->>'unit',''))>30) then
     raise exception 'Campaign planning values are invalid' using errcode='22023';
   end if;
   if v_start is not null and v_end is not null and v_end<v_start then
@@ -185,9 +185,9 @@ begin
   end if;
   if exists(select 1 from unnest(v_pillars) p where length(p)>120)
     or exists(select 1 from unnest(v_channels) ch where ch not in ('instagram','facebook','youtube','linkedin','threads','pinterest','tiktok','x'))
-    or exists(select 1 from jsonb_array_elements(v_metrics) m
-      where jsonb_typeof(m)<>'object' or length(coalesce(m->>'name',''))>80
-        or length(coalesce(m->>'target',''))>80 or length(coalesce(m->>'unit',''))>30) then
+    or exists(select 1 from jsonb_array_elements(v_metrics) as item(value)
+      where jsonb_typeof(item.value)<>'object' or length(coalesce(item.value->>'name',''))>80
+        or length(coalesce(item.value->>'target',''))>80 or length(coalesce(item.value->>'unit',''))>30) then
     raise exception 'Campaign planning values are invalid' using errcode='22023';
   end if;
   if v_start is not null and v_end is not null and v_end<v_start then
