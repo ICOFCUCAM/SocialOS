@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": { "test": "node --test" },
-  "dependencies": { "@supabase/supabase-js": "^2.57.0" }
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
+    "ioredis": "^5.4.2"
+  }
 }
