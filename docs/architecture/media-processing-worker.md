@@ -20,27 +20,48 @@ Optional: `MEDIA_BUCKET`, `WORKER_ID`, `POLL_INTERVAL_MS`, `MAX_MEDIA_BYTES`, `C
 - ClamAV exit 0 means clean; exit 1 means infected and quarantines the asset; all other exit codes, missing binaries and timeouts fail closed and enter normal retry/dead-letter handling.
 - A scan failure never permits an asset to become `ready`.
 - The image runs as the unprivileged Node user. The signature database is stored in the container's writable temporary area.
-- Fresh signatures are downloaded at container start. Restart/redeploy the worker on a regular schedule (at least daily) to refresh signatures until a managed updater is added. Do not treat a stale, long-running container as having current signatures.
+- Fresh signatures are downloaded at container start. Restart/redeploy the worker at least daily until a managed updater is introduced.
 
-This gate is malware scanning, not a guarantee that every unknown or zero-day threat will be detected. ClamAV definitions and engine must be kept current.
+## Rendition generation
+
+The worker derives outputs for the requested publishing targets. Supply an array of supported platform IDs in `social_media_assets.metadata.targetPlatforms`; when omitted, it prepares Instagram, Facebook, YouTube, LinkedIn and Pinterest profiles. Unknown IDs fail the job rather than silently receiving a wrong output.
+
+Internal aspect-ratio profiles are deduplicated across platforms:
+
+| Profile | Dimensions | Used by |
+| --- | ---: | --- |
+| Portrait image | 1080 × 1350 | Instagram, Facebook |
+| Square image | 1080 × 1080 | Threads |
+| Landscape image/video | 1920 × 1080 | YouTube, LinkedIn |
+| Pin image | 1000 × 1500 | Pinterest |
+| Vertical video | 1080 × 1920, 30 fps | Instagram, Facebook, Pinterest |
+| Square video | 1080 × 1080, 30 fps | Threads |
+
+- Image outputs are WebP, resized to fit without cropping. The existing general preview is retained.
+- Video outputs are H.264/AAC MP4, scaled and padded to the target frame, with fixed frame rate and bounded bitrate.
+- Identical aspect-ratio profiles are generated once even when multiple platforms use them.
+- Derivatives are private and stored under the tenant/brand/asset path in a `renditions/` folder.
+- Target platform IDs and the generated profile metadata are recorded with the processing result.
+
+These are internal production presets, not a promise of platform acceptance. Platform APIs change their upload limits, codecs, duration, aspect ratios and publishing permissions. Each publishing adapter must validate current official requirements, apply final constraints and handle rejection responses before attempting publication. Do not represent a successful transcode as a successful platform upload.
 
 ## Processing contract
 
 - Download originals only from the private Supabase bucket using the service role.
 - Inspect file signatures; do not trust filename or declared MIME alone.
 - Scan the original before any media parser/decoder is invoked.
-- Decode and re-encode images with Sharp, applying EXIF orientation and producing a WebP preview.
-- Probe videos with ffprobe, enforce duration and pixel limits, produce a JPEG poster, and encode a bounded H.264/AAC MP4 mezzanine derivative with FFmpeg.
+- Decode and re-encode images with Sharp, applying EXIF orientation.
+- Probe videos with ffprobe, enforce duration and pixel limits, produce a JPEG poster and platform rendition files.
 - Invoke FFmpeg with argument arrays and `shell: false`.
 - Store derivatives in the private bucket under server-generated tenant/brand/asset paths.
-- Mark an asset ready only after scan, processing and derivative upload succeed.
+- Mark an asset ready only after scan, processing and every requested derivative upload succeed.
 - Retry processing errors with bounded backoff; quarantine malware and signature/category mismatches; dead-letter exhausted jobs.
 - Recover abandoned running jobs through `recover_stale_media_processing_jobs`.
 
 ## Validation and limitations
 
-Run `npm test` in this package. Tests cover clean/malware/unavailable scanner exit handling using a controlled fake scanner; they do not replace an integration test with real ClamAV signatures and the EICAR test file. No malware scan has been performed against a production upload.
+Run `npm test` in this package. Unit tests cover scanner exit handling and profile mapping. They do not replace a real ClamAV/EICAR integration test, media fixture tests or upload tests against a staging Supabase project.
 
-Platform-specific renditions, animated-GIF policy handling, audio normalization, derivative cleanup/retention, signed preview delivery and operational metrics are not yet implemented.
+Audio normalization, animated-GIF policy handling, derivative cleanup/retention, signed preview delivery, per-platform API validation, operational metrics and real publishing integration tests remain future work.
 
 Apply the preceding migration stack in order before starting the worker. No migration is applied by this change. Verify the target Supabase project's global Storage size limit: local config currently declares 50 MiB while the private bucket migration allows 250 MiB.
