@@ -19,7 +19,8 @@ export function CampaignForm({organizationId,brandId,initial,mode="create",brand
  organizationId:string;brandId:string;initial?:Campaign;mode?:"create"|"edit";brandOptions?:{id:string;name:string}[];
 }){
  const router=useRouter();
- const [selectedBrandId,setSelectedBrandId]=useState(brandId);\n const [name,setName]=useState(initial?.name??"");
+ const [selectedBrandId,setSelectedBrandId]=useState(brandId);
+ const [name,setName]=useState(initial?.name??"");
  const [description,setDescription]=useState(initial?.description??"");
  const [objective,setObjective]=useState(initial?.objective??"");
  const [audience,setAudience]=useState(initial?.target_audience??"");
