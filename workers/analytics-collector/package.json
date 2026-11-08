@@ -3,6 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": { "start": "node src/collector.mjs", "check": "node --check src/collector.mjs" },
-  "dependencies": { "@supabase/supabase-js": "^2.57.0" }
+  "scripts": {
+    "start": "node src/collector.mjs",
+    "check": "node --check src/collector.mjs && node --check src/meta-insights.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0"
+  }
 }
