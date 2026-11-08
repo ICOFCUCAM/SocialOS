@@ -16,13 +16,11 @@ begin
     for update skip locked
   ), changed as (
     update public.publish_jobs j
-    set status = case when s.attempt_count >= s.max_attempts
-                      then 'dead_letter'::public.publish_job_status
-                      else 'retry'::public.publish_job_status end,
+    set status = 'dead_letter'::public.publish_job_status,
         available_at = now(),
         locked_at = null,
         locked_by = null,
-        completed_at = case when s.attempt_count >= s.max_attempts then now() else null end,
+        completed_at = now(),
         last_error_code = 'WORKER_LEASE_EXPIRED',
         last_error_message = 'Publishing worker lease expired. Provider outcome must be reconciled before retry.'
     from stale s
@@ -30,9 +28,7 @@ begin
     returning j.target_id, j.status
   ), updated_targets as (
     update public.social_post_targets t
-    set status = case when c.status = 'dead_letter'::public.publish_job_status
-                      then 'failed'::public.social_post_target_status
-                      else 'queued'::public.social_post_target_status end,
+    set status = 'failed'::public.social_post_target_status,
         last_error_code = 'WORKER_LEASE_EXPIRED',
         last_error_message = 'Worker stopped before the publishing result was recorded; verify provider state before retry.'
     from changed c
