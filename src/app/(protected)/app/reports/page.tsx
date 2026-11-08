@@ -8,7 +8,7 @@ type AccountRow = { id: string; platform_id: string };
 type PlatformRow = { id: string; code: string };
 type TargetRow = { id: string; social_account_id: string };
 
-const validDate = (value?: string) => Boolean(value && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + "T00:00:00Z")));
+const validDate = (value?: string) => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + "T00:00:00Z")));
 const iso = (date: Date) => date.toISOString().slice(0, 10);
 const fmt = (value: number | null) => value === null ? "—" : new Intl.NumberFormat("en", { notation: value >= 100000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
 const sum = (rows: MetricRow[], key: "impressions" | "reach" | "engagements" | "clicks") => {
