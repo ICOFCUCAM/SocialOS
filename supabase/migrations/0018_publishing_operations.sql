@@ -28,7 +28,11 @@ grant all on public.publish_job_events to service_role;
 create policy publish_job_events_select_tenant on public.publish_job_events
   for select to authenticated using (
     exists (
-      select 1 from public.social_posts p
-      where p.id=publish_job_events_target_post_id_placeholder
+      select 1
+      from public.social_post_targets t
+      join public.social_posts p on p.id=t.post_id and p.organization_id=t.organization_id
+      where t.id=publish_job_events.target_id
+        and t.organization_id=publish_job_events.organization_id
+        and public.can_access_brand(p.brand_id,p.organization_id)
     )
   );
