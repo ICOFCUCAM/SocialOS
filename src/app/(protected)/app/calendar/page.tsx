@@ -27,9 +27,7 @@ export default async function CalendarPage({searchParams}:{searchParams:Promise<
   const [{data:posts,error},{data:brands}] = await Promise.all([
     supabase.from("social_posts").select("id,title,body,status,scheduled_at,published_at,created_at,brand_id")
       .eq("organization_id",member.organization_id)
-      .gte("created_at",new Date(gridStart.getTime()-86400000*60).toISOString())
-      .lt("created_at",gridEnd.toISOString())
-      .order("scheduled_at",{ascending:true,nullsFirst:false}).limit(300),
+      .order("created_at",{ascending:false}).limit(500),
     supabase.from("brands").select("id,name").eq("organization_id",member.organization_id)
   ]);
   if(error)throw new Error("Unable to load the content calendar.");
