@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createSocialAdminClient } from "@/lib/social/admin";
 import { encryptToken, getProvider, oauthRedirectUri, toPgBytea, verifyOAuthState, type Provider } from "@/lib/social/oauth";
 
-type TokenResponse={access_token?:string;refresh_token?:string;expires_in?:number;scope?:string;token_type?:string;error?:string};
+type TokenResponse={access_token?:string;refresh_token?:string;expires_in?:number;refresh_token_expires_in?:number;scope?:string;token_type?:string;error?:string};
 type Profile={id?:string;sub?:string;name?:string;picture?:string};
 function returnToApp(request:NextRequest,status:string) {
   const base=process.env.SOCIAL_OAUTH_REDIRECT_BASE_URL;
@@ -135,15 +135,19 @@ export async function GET(request:NextRequest) {
     if (accountError || !account) throw new Error("Unable to save connected account.");
     const access=encryptToken(tokens.access_token);
     const refresh=tokens.refresh_token?encryptToken(tokens.refresh_token):null;
+    const {data:previousTokens}=await admin.from("social_account_tokens").select("refresh_token_nonce,refresh_token_ciphertext,refresh_token_tag,refresh_token_expires_at")
+      .eq("social_account_id",account.id).eq("organization_id",signed.organizationId).maybeSingle();
     const {error:tokenError}=await admin.from("social_account_tokens").upsert({
       organization_id:signed.organizationId,social_account_id:account.id,
       access_token_nonce:toPgBytea(access.nonce),access_token_ciphertext:toPgBytea(access.ciphertext),access_token_tag:toPgBytea(access.tag),
-      refresh_token_nonce:refresh?toPgBytea(refresh.nonce):null,refresh_token_ciphertext:refresh?toPgBytea(refresh.ciphertext):null,refresh_token_tag:refresh?toPgBytea(refresh.tag):null,
+      refresh_token_nonce:refresh?toPgBytea(refresh.nonce):previousTokens?.refresh_token_nonce??null,
+      refresh_token_ciphertext:refresh?toPgBytea(refresh.ciphertext):previousTokens?.refresh_token_ciphertext??null,
+      refresh_token_tag:refresh?toPgBytea(refresh.tag):previousTokens?.refresh_token_tag??null,
       encryption_algorithm:access.algorithm,encryption_key_version:access.keyVersion,
       access_token_expires_at:tokens.expires_in?new Date(Date.now()+tokens.expires_in*1000).toISOString():null,
-      refresh_token_expires_at:tokens.refresh_token_expires_in?new Date(Date.now()+tokens.refresh_token_expires_in*1000).toISOString():null,
+      refresh_token_expires_at:tokens.refresh_token_expires_in?new Date(Date.now()+tokens.refresh_token_expires_in*1000).toISOString():previousTokens?.refresh_token_expires_at??null,
       last_refreshed_at:new Date().toISOString(),
-      token_type:"Bearer"
+      token_type:tokens.token_type??"Bearer"
     },{onConflict:"social_account_id"});
     if (tokenError) {
       await admin.from("social_accounts").update({connection_status:"error",last_error:"Secure token storage failed."}).eq("id",account.id);
