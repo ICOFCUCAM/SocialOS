@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowUpRight, Globe2, Layers3, Plus, Search } from "lucide-react";
+import { ArrowUpRight, Globe2, Layers3, Plus } from "lucide-react";
 
 export default async function BrandsPage() {
   const supabase=await createClient();
