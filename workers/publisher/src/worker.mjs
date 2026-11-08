@@ -208,6 +208,19 @@ async function refreshPostStatus(postId, organizationId) {
     last_error_code: failed > 0 ? "ONE_OR_MORE_TARGETS_FAILED" : null
   }).eq("id", postId).eq("organization_id", organizationId), "Unable to update post aggregate status");
 }
+async function recordJobEvent(job, target, eventType, details = {}) {
+  const { error } = await db.from("publish_job_events").insert({
+    organization_id: job.organization_id,
+    job_id: job.id,
+    target_id: target.id,
+    event_type: eventType,
+    attempt_number: job.attempt_count,
+    error_code: details.code || null,
+    message: details.message || null,
+    metadata: details.metadata || {}
+  });
+  if (error) process.stderr.write(JSON.stringify({ event: "publish_event_record_failed", jobId: job.id, code: error.code || "EVENT_WRITE_FAILED" }) + "\\n");
+}
 async function finish(job, target, publication) {
   const now = new Date().toISOString();
   await must(await db.from("social_post_targets").update({
@@ -220,6 +233,7 @@ async function finish(job, target, publication) {
     last_error_code: null, last_error_message: null
   }).eq("id", job.id), "Unable to complete publishing job");
   await refreshPostStatus(target.post_id, job.organization_id);
+  await recordJobEvent(job, target, "published", { metadata: { external_post_id: publication.externalPostId } });
   await db.from("audit_events").insert({
     organization_id: job.organization_id, action: "social.post.published",
     resource_type: "social_post_target", resource_id: target.id,
@@ -244,6 +258,7 @@ async function fail(job, target, error) {
     last_error_message: ambiguous ? "Provider outcome is uncertain; reconcile externally before retrying." : message
   }).eq("id", target.id).eq("organization_id", job.organization_id), "Unable to update target failure");
   await refreshPostStatus(target.post_id, job.organization_id);
+  await recordJobEvent(job, target, ambiguous ? "outcome_unknown" : terminal ? "dead_lettered" : "retry_scheduled", { code: ambiguous ? "PUBLISH_OUTCOME_UNKNOWN" : code, message: ambiguous ? "Provider outcome requires reconciliation." : message });
   if (terminal) {
     await db.from("social_accounts").update({
       ...(code === "REAUTHORIZATION_REQUIRED" || code === "MISSING_PUBLISH_SCOPES" || code === "AUTHORIZATION_REVOKED" || code === "PROVIDER_PERMISSION_DENIED" ? { connection_status: "reauthorization_required" } : {}),
