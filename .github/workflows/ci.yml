@@ -25,6 +25,7 @@ jobs:
           node --check workers/publisher/src/worker.mjs
           node --check workers/analytics-collector/src/collector.mjs
           node --check workers/analytics-collector/src/meta-insights.mjs
+          node --check workers/analytics-collector/src/linkedin-insights.mjs
           npm test --prefix workers/analytics-collector
           npm test --prefix workers/publisher
       - name: TypeScript
