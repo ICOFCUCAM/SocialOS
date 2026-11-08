@@ -118,7 +118,6 @@ $$;
 
 revoke all on function public.claim_publish_jobs(text,integer) from public,anon,authenticated,service_role;
 revoke all on function public.claim_publish_jobs(text,integer,integer) from public,anon,authenticated,service_role;
-grant execute on function public.claim_publish_jobs(text,integer,integer) to service_role;
 
 comment on table public.publish_organization_fairness is
   'Service-only workspace claim fairness cursor for durable publisher scheduling.';
