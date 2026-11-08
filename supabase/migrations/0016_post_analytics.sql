@@ -39,7 +39,8 @@ create policy social_post_analytics_select_brand on public.social_post_analytics
       from public.social_post_targets t
       join public.social_posts p
         on p.id=t.post_id and p.organization_id=t.organization_id
-      where t.id=target_id and t.organization_id=organization_id
+      where t.id=social_post_analytics_daily.target_id
+        and t.organization_id=social_post_analytics_daily.organization_id
         and private.can_access_brand(p.brand_id,p.organization_id)
     )
   );
