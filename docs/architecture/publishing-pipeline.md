@@ -40,7 +40,7 @@ Set `scheduledAt` to null or omit it to create a draft. A future timestamp creat
 - `dead_letter`: retry limit exhausted or non-retryable failure.
 - `cancelled`: job intentionally cancelled before completion.
 
-Workers must implement lease recovery for abandoned `running` jobs, bounded exponential backoff with jitter, provider rate-limit handling, and idempotent publication. Never blindly retry an ambiguous provider timeout without checking whether the platform already created the post.
+Workers implement lease recovery for abandoned `running` jobs, bounded exponential backoff with jitter, and ambiguous-outcome protection. Provider rate-limit coordination uses Redis shared across publisher replicas. Before dispatch, the worker checks provider-app and account cooldown keys; after an HTTP 429 with `Retry-After`, it records a bounded cooldown at both scopes. If Redis is configured but unavailable, publishing pauses and retries rather than bypassing coordination. Production publisher containers require `REDIS_URL`. Never blindly retry an ambiguous provider timeout without checking whether the platform already created the post.
 
 ## Security boundaries
 
@@ -57,3 +57,13 @@ Workers must implement lease recovery for abandoned `running` jobs, bounded expo
 - No UI composer, media upload pipeline, video transcoding, approval workflow, refresh-token lifecycle or platform-specific validation is included.
 - The worker must treat the database as the durable source of truth. Redis/BullMQ can wake workers and distribute load, but must not be the only record of a scheduled post.
 - Apply this migration only to the dedicated SocialOS development project after review and tenant-isolation tests. Do not apply to production as an unreviewed change.
+
+
+## Distributed provider rate-limit coordination
+
+- Configure `REDIS_URL` on every publisher replica. Production workers fail at startup if it is missing.
+- Optional provider app identifiers: `META_APP_ID`, `GOOGLE_CLIENT_ID`, and `LINKEDIN_CLIENT_ID`. The worker shares cooldowns by provider application and connected social account.
+- HTTP 429 responses use the provider's `Retry-After` header when present; cooldowns are bounded to six hours.
+- The coordinator does not invent provider quotas or assume all endpoints share the same quota. Business-level scopes and provider-specific usage-header interpretation remain future work until the provider contracts are verified.
+- Redis coordinates cooldown state only. PostgreSQL remains the durable publishing queue and source of truth.
+- Local development without `REDIS_URL` may run without distributed coordination; production may not.
