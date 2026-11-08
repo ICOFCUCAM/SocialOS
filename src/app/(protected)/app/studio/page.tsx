@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AIContentStudio } from "@/components/app/ai-content-studio";
@@ -19,6 +20,6 @@ export default async function ContentStudioPage({searchParams}:{searchParams:Pro
   const validBrand=(brands??[]).some(b=>b.id===requestedBrand)?requestedBrand:brands?.[0]?.id;
   return <div className="space-y-7">
     <section><p className="text-xs font-semibold tracking-[.16em] text-[#176b4b]">SOCIALOS INTELLIGENCE</p><h1 className="mt-3 text-3xl font-semibold tracking-tight">AI Content Studio</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#77847b]">Turn a campaign objective into platform-aware content, shaped by your saved brand voice and audience. Generate, review and refine before publishing.</p></section>
-    {brands?.length?<AIContentStudio brands={brands as {id:string;name:string;brand_settings:unknown}[]} initialBrandId={validBrand}/>:<section className="rounded-2xl border border-dashed border-[#d9e4da] bg-white px-6 py-14 text-center"><h2 className="text-sm font-semibold">Create a brand to begin</h2><p className="mt-2 text-xs text-[#89958d]">AI content is grounded in a brand identity. Create an active brand and define its voice first.</p><a href="/app/brands/new" className="mt-5 inline-flex rounded-xl bg-[#176b4b] px-4 py-2.5 text-xs font-semibold text-white">Add a brand</a></section>}
+    {brands?.length?<AIContentStudio brands={brands as {id:string;name:string;brand_settings:unknown}[]} initialBrandId={validBrand}/>:<section className="rounded-2xl border border-dashed border-[#d9e4da] bg-white px-6 py-14 text-center"><h2 className="text-sm font-semibold">Create a brand to begin</h2><p className="mt-2 text-xs text-[#89958d]">AI content is grounded in a brand identity. Create an active brand and define its voice first.</p><Link href="/app/brands/new" className="mt-5 inline-flex rounded-xl bg-[#176b4b] px-4 py-2.5 text-xs font-semibold text-white">Add a brand</Link></section>}
   </div>;
 }
