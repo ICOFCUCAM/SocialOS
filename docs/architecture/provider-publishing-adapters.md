@@ -1,60 +1,81 @@
-# Official provider publishing and worker orchestration
+# OAuth token lifecycle and publisher worker
 
-## Supported provider operations
+## Token lifecycle
 
-- Facebook Pages: text feed posts and single photo/video posts using a temporary fetchable media URL.
-- Instagram professional accounts: one image or Reel per publication, using the media-container then publish flow. Video container processing is polled before publishing.
-- YouTube: one MP4 video through the resumable upload API. Default privacy is private unless an explicit option is supplied.
-- LinkedIn: text-only member posts through the Posts API. Media uploads are deliberately rejected until its upload workflow is implemented.
-- Other platforms fail with `PROVIDER_NOT_SUPPORTED`; no unofficial API or browser automation fallback is used.
+- OAuth access and refresh tokens are encrypted with AES-256-GCM. Encryption keys remain outside PostgreSQL.
+- The publisher checks token expiry before a publish attempt and refreshes supported provider tokens before they expire.
+- Google/YouTube refresh uses the Google OAuth token endpoint. LinkedIn refresh uses the LinkedIn OAuth token endpoint where the application and authorization are eligible for refresh tokens.
+- Meta Page and Instagram tokens are not refreshed through this generic OAuth refresh path. Expired Meta credentials require reconnecting.
+- Refresh requests are serialized per social account through a database lease RPC so multiple worker replicas do not race refresh-token rotation.
+- Provider refresh-token rotation is persisted when a new refresh token is returned.
+- Invalid or expired refresh grants move the social account to `reauthorization_required`; the worker does not continue publishing with invalid credentials.
 
-## OAuth permissions
+## Encryption key rotation
 
-- Meta: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`.
-- YouTube: `https://www.googleapis.com/auth/youtube.upload`.
-- LinkedIn: `openid`, `profile`, `w_member_social`.
+The worker and OAuth callback support a versioned key ring.
 
-Existing accounts must reconnect to grant newly requested publishing scopes. Provider app review, verification, user eligibility and production access remain subject to each provider's requirements. A requested scope does not mean the provider has approved the application.
+Recommended environment configuration:
 
-## Publisher worker
+- `SOCIAL_TOKEN_KEY_VERSION`: current key identifier, e.g. `v2`.
+- `SOCIAL_TOKEN_ENCRYPTION_KEYS`: JSON object mapping key IDs to base64-encoded 32-byte keys, e.g. `{"v1":"<base64-old-key>","v2":"<base64-current-key>" }`.
+
+For backwards compatibility, `SOCIAL_TOKEN_ENCRYPTION_KEY` may be used as the current key when the key ring does not contain the current key ID.
+
+Rotation procedure:
+1. Generate a new random 32-byte key in a secret manager.
+2. Add the new key under a new key ID while retaining the old key ID and key.
+3. Set `SOCIAL_TOKEN_KEY_VERSION` to the new key ID.
+4. Deploy the callback and publisher worker with the same key ring.
+5. As accounts refresh or reconnect, their access and refresh tokens are re-encrypted under the current key version.
+6. Do not remove the old key until every stored token row has been re-encrypted and verified. A database inventory query should confirm no rows remain on the old version.
+
+Never place real key material in source control, build arguments, logs or client-exposed environment variables.
+
+## Worker deployment
 
 Build `workers/publisher/Dockerfile` with `workers/publisher` as the build context. Run as a separate long-running service, not as a Vercel function.
 
 Required environment variables:
-
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `SOCIAL_TOKEN_ENCRYPTION_KEY` — base64-encoded 32-byte AES-256-GCM key matching the key version used to encrypt the account tokens.
+- `SOCIAL_TOKEN_KEY_VERSION`
+- `SOCIAL_TOKEN_ENCRYPTION_KEYS` (or legacy single-key variable)
 
 Provider configuration:
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`
+- `META_GRAPH_API_VERSION`
+- `LINKEDIN_API_VERSION`
 
-- `META_GRAPH_API_VERSION` — explicit Graph API version, e.g. `v25.0`.
-- `LINKEDIN_API_VERSION` — provider-approved version in `YYYYMM` form.
-- `PUBLISH_WORKER_ID`, `PUBLISH_POLL_INTERVAL_MS`, `PUBLISH_MEDIA_URL_TTL_SECONDS`, `PUBLISH_MAX_VIDEO_BYTES` are optional worker controls.
+Optional worker controls:
+- `PUBLISH_WORKER_ID`
+- `PUBLISH_POLL_INTERVAL_MS`
+- `PUBLISH_MEDIA_URL_TTL_SECONDS`
+- `PUBLISH_MAX_VIDEO_BYTES`
 
-The worker:
-1. Runs the stale publishing lease recovery RPC and atomically claims one due job.
-2. Loads its tenant-scoped post, target, connected account and platform.
-3. Decrypts AES-256-GCM credentials inside the worker process only.
-4. Stops and marks the account for reauthorization if its access token has expired. Automatic refresh is not yet implemented.
-5. Resolves the target platform's prepared media profile from private Storage. It issues short-lived signed URLs for Meta and downloads the prepared YouTube MP4.
-6. Calls the platform adapter and records the external post ID and permalink, when returned.
-7. Updates target, job and aggregate post states and writes an audit event.
+## Publishing behavior
+
+The worker claims due jobs, loads tenant-scoped post/target/account records, refreshes expiring OAuth tokens where supported, decrypts credentials in memory, retrieves prepared private media derivatives, calls provider adapters and persists results.
+
+- Facebook Pages: text and single photo/video.
+- Instagram professional accounts: one image or Reel.
+- YouTube: one MP4 through resumable upload.
+- LinkedIn: text-only posts.
+- LinkedIn media, Instagram carousels, Facebook multi-photo, TikTok, X, Threads and Pinterest publishing are not implemented.
 
 ## Retry and duplicate prevention
 
 - HTTP 429 responses can be retried using `Retry-After`; transient failures use bounded exponential backoff with jitter.
-- Ambiguous provider outcomes are dead-lettered for manual reconciliation. The worker must not blindly retry a timeout that might have created a post.
-- An expired worker lease is also dead-lettered unless a provider post ID was already saved. This avoids automatic duplicate publication after a worker crashes between the remote publish call and the database update.
-- Stale lease recovery requires migration `0011_publish_worker_lease_recovery.sql`.
+- Ambiguous provider outcomes are dead-lettered for manual reconciliation.
+- Expired worker leases without a recorded provider post ID are dead-lettered rather than blindly retried.
+- An expired or revoked refresh grant requires user reconnection.
+- Migration `0011_publish_worker_lease_recovery.sql` handles publishing leases.
+- Migration `0012_oauth_token_refresh_lock.sql` serializes token refresh operations.
 
-## Explicit limitations
+## Operational requirements and limitations
 
-- The adapters have not been verified against live provider accounts.
-- Instagram carousel, Facebook multi-photo, LinkedIn media, and TikTok, X, Threads and Pinterest publishing are not implemented.
-- OAuth token refresh and revocation handling are not implemented; expired accounts must reconnect.
-- Platform rate-limit coordination across multiple workers, provider-side reconciliation tools, integration tests and operational dashboards remain future work.
-- YouTube upload currently buffers the prepared MP4 in memory; size limits and a single-job worker are important until streaming/resumable chunk persistence is implemented.
-- Provider API requirements, app review and publishing permissions must be rechecked before production.
-
-No database migration has been applied and no worker has been deployed by this change.
+- Apply migrations in order before deploying the worker.
+- Provider app review, production access, refresh-token eligibility and scope approval remain provider-controlled.
+- Meta token refresh is not automatic in this implementation.
+- Provider API calls have not been tested against live accounts.
+- No database migration has been applied and no worker has been deployed by this change.
