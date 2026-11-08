@@ -26,13 +26,17 @@ export async function providerJson(response, provider) {
     const metaUsage = provider === "Facebook" || provider === "Instagram"
       ? (await import("./provider-quota-intelligence.mjs")).parseMetaUsageHeaders(response.headers)
       : null;
+    const businessCooldown = metaUsage?.business
+      ?.filter(item => Number.isFinite(item.retryAfterMs) && item.retryAfterMs > 0)
+      .sort((a,b) => b.retryAfterMs-a.retryAfterMs)[0] || null;
     throw new PublishError(provider + " API returned HTTP " + response.status, {
       code: quota?.code || (response.status === 401 ? "AUTHORIZATION_REVOKED" : response.status === 403 ? "PROVIDER_PERMISSION_DENIED" : provider.toUpperCase() + "_HTTP_" + response.status),
       retryable: quota?.retryable ?? retryable,
-      retryAfterMs: headerRetryAfter ?? quota?.retryAfterMs ?? null,
+      retryAfterMs: headerRetryAfter ?? quota?.retryAfterMs ?? businessCooldown?.retryAfterMs ?? null,
       ambiguous: response.status >= 500,
       status: response.status,
-      quotaScope: quota?.quotaScope || null,
+      quotaScope: quota?.quotaScope || (businessCooldown ? "business_use_case" : null),
+      businessId: businessCooldown?.businessId || null,
       usage: metaUsage
     });
   }
