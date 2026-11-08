@@ -2,7 +2,7 @@
 
 ## Supported in this first server-side adapter slice
 
-- YouTube via Google OAuth and YouTube Data API v3 channel lookup.
+- YouTube via Google OAuth and YouTube Data API v3 channel lookup.\n- Meta OAuth with Facebook Page discovery and linked Instagram professional-account discovery.
 - LinkedIn member profile via Sign In with LinkedIn / OpenID Connect.
 
 This is not yet the full Meta (Facebook Pages + Instagram), TikTok, Threads, Pinterest or X integration. Provider publishing capabilities and app approval are separate from basic account identification.
@@ -54,3 +54,25 @@ LinkedIn: request the Sign In with LinkedIn using OpenID Connect product. This a
 3. Add provider capability and publishing permission checks; basic profile connection does not imply publishing permission.
 4. Add OAuth integration tests and tenant-isolation tests.
 5. Add token-key rotation tooling and operational alerting.
+
+## Meta app setup
+
+Configure a Meta app with the Facebook Login product and the current Graph API version. Register this exact redirect URI:
+
+- `https://your-socialos-host.example/api/social/callback?provider=meta`
+
+Set `META_CLIENT_ID`, `META_CLIENT_SECRET` and `META_GRAPH_API_VERSION` on the server. The default Graph API version in this adapter is configurable; verify it against the version enabled for your Meta app before deployment.
+
+The adapter requests these permissions:
+- `pages_show_list` to enumerate Pages the authorizing person can access.
+- `pages_read_engagement` to read Page metadata and engagement context.
+- `pages_manage_posts` for future Facebook Page publishing.
+- `instagram_basic` and `instagram_content_publish` for eligible Instagram professional accounts.
+
+The callback exchanges the authorization code, requests a long-lived Meta user token, discovers accessible Facebook Pages and linked Instagram professional accounts, and stores each Page/profile as a separate SocialOS account. Page access tokens are encrypted before persistence. The Instagram professional account uses its associated Page access token for this Facebook Login-based integration.
+
+Important eligibility and review constraints:
+- Instagram must be a professional (Business or Creator) account linked to a Facebook Page for this integration path.
+- Permissions and publishing features require the appropriate Meta app review / Advanced Access before use with people outside app roles or test users.
+- The connected Facebook user must have the necessary Page task/access level.
+- This first slice does not yet implement publishing, media-container processing, token refresh monitoring, revocation, or granular capability checks. Do not expose publishing controls until those are implemented and verified.
