@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createDecipheriv } from "node:crypto";
 import { collectMetaInsights } from "./meta-insights.mjs";
+import { collectLinkedInInsights } from "./linkedin-insights.mjs";
 
 const required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
 for (const name of required) if (!process.env[name]) throw new Error(name + " is required.");
@@ -103,6 +104,14 @@ async function collectYouTubeTarget(target, token) {
   return records.length;
 }
 
+async function persistLinkedInTarget(target, token) {
+  const records = await collectLinkedInInsights(target, token, fetch, () => wait(delayMs));
+  if (!records.length) return 0;
+  const { error } = await db.from("social_post_analytics_daily").upsert(records, { onConflict: "target_id,metric_date,period_type" });
+  if (error) throw new Error("Unable to persist LinkedIn analytics: " + error.message);
+  return records.length;
+}
+
 async function persistMetaTarget(target, platformCode, token) {
   const records = await collectMetaInsights(target, platformCode, token);
   if (!records.length) return 0;
@@ -130,13 +139,15 @@ async function main() {
       if (accountError || !account || account.connection_status !== "connected") { skipped++; continue; }
       const { data: platform, error: platformError } = await db.from("social_platforms")
         .select("code").eq("id", account.platform_id).single();
-      if (platformError || !["youtube", "facebook", "instagram"].includes(platform?.code)) { skipped++; continue; }
+      if (platformError || !["youtube", "facebook", "instagram", "linkedin"].includes(platform?.code)) { skipped++; continue; }
       const scopes = account.granted_scopes ?? [];
       const requiredScopes = platform.code === "youtube"
         ? ["https://www.googleapis.com/auth/youtube.readonly"]
         : platform.code === "instagram"
           ? ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"]
-          : ["read_insights", "pages_read_engagement"];
+          : platform.code === "linkedin"
+            ? ["r_member_postAnalytics"]
+            : ["read_insights", "pages_read_engagement"];
       if (!requiredScopes.every(scope => scopes.includes(scope))) {
         skipped++;
         console.warn("Skipped account without required analytics permissions:", account.id, platform.code);
@@ -152,6 +163,7 @@ async function main() {
       }
       const token = decryptToken(tokenRow);
       if (platform.code === "youtube") collected += await collectYouTubeTarget(target, token);
+      else if (platform.code === "linkedin") collected += await persistLinkedInTarget(target, token);
       else collected += await persistMetaTarget(target, platform.code, token);
     } catch (error) {
       failed++;
