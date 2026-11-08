@@ -1,11 +1,14 @@
 export class PublishError extends Error {
-  constructor(message, { code = "PUBLISH_FAILED", retryable = false, retryAfterMs = null, ambiguous = false } = {}) {
+  constructor(message, { code = "PUBLISH_FAILED", retryable = false, retryAfterMs = null, ambiguous = false, status = null, quotaScope = null, usage = null } = {}) {
     super(message);
     this.name = "PublishError";
     this.code = code;
     this.retryable = retryable;
     this.retryAfterMs = retryAfterMs;
     this.ambiguous = ambiguous;
+    this.status = status;
+    this.quotaScope = quotaScope;
+    this.usage = usage;
   }
 }
 
@@ -28,6 +31,7 @@ export async function providerJson(response, provider) {
       retryable: quota?.retryable ?? retryable,
       retryAfterMs: headerRetryAfter ?? quota?.retryAfterMs ?? null,
       ambiguous: response.status >= 500,
+      status: response.status,
       quotaScope: quota?.quotaScope || null,
       usage: metaUsage
     });
