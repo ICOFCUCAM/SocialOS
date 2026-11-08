@@ -24,6 +24,8 @@ jobs:
         run: |
           node --check workers/publisher/src/worker.mjs
           node --check workers/analytics-collector/src/collector.mjs
+          node --check workers/analytics-collector/src/meta-insights.mjs
+          npm test --prefix workers/analytics-collector
           npm test --prefix workers/publisher
       - name: TypeScript
         run: npm run typecheck
