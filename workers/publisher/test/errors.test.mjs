@@ -26,3 +26,17 @@ test("provider 4xx is not retryable", async () => {
 test("scope check rejects absent publishing permissions", () => {
   assert.throws(() => requireScopes(["profile"], ["publish"], "Test"), error => error.code === "MISSING_PUBLISH_SCOPES");
 });
+
+test("provider 401 is classified as revoked authorization", async () => {
+  await assert.rejects(
+    providerJson(new Response("{}", { status: 401 }), "Test"),
+    error => error.code === "AUTHORIZATION_REVOKED" && !error.retryable
+  );
+});
+
+test("provider 403 is classified as a permission problem", async () => {
+  await assert.rejects(
+    providerJson(new Response("{}", { status: 403 }), "Test"),
+    error => error.code === "PROVIDER_PERMISSION_DENIED" && !error.retryable
+  );
+});
