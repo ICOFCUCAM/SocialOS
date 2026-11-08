@@ -12,7 +12,7 @@ const METRICS = [
 
 function apiVersion() {
   const version = process.env.LINKEDIN_API_VERSION;
-  if (!version || !/^\\d{6}$/.test(version)) {
+  if (!version || !/^[0-9]{6}$/.test(version)) {
     throw new Error("LINKEDIN_API_VERSION must be explicitly configured as YYYYMM.");
   }
   return version;
