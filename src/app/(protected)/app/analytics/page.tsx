@@ -63,7 +63,7 @@ export default async function AnalyticsPage() {
     );
     return { id: campaign.id, name: campaign.name, status: campaign.status, posts: campaignPosts.length, rows };
   });
-  const allRows = campaignStats.flatMap(c => c.rows);
+  const allRows = [...new Map(campaignStats.flatMap(c => c.rows).map(row => [row.target_id + ":" + row.metric_date, row])).values()];
   const measured = allRows.length > 0;
   const cards = [
     { label: "Impressions", value: sum(allRows, "impressions"), icon: Eye },
