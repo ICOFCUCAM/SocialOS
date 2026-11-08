@@ -255,6 +255,27 @@ begin
     and b.organization_id=v_org_id and b.is_active) then
     raise exception 'Active brand not found in this workspace' using errcode='42501';
   end if;
+  if v_role not in ('owner','administrator','manager') and not exists(
+    select 1 from public.brand_members bm
+    where bm.organization_id=v_org_id and bm.brand_id=v_brand_id and bm.user_id=v_user_id
+      and bm.role in ('manager','editor','publisher')
+  ) then
+    raise exception 'Brand membership required' using errcode='42501';
+  end if;
+  if v_scheduled_at is not null and v_role not in ('owner','administrator','manager','publisher')
+    and not exists(select 1 from public.brand_members bm
+      where bm.organization_id=v_org_id and bm.brand_id=v_brand_id and bm.user_id=v_user_id
+        and bm.role in ('manager','publisher')) then
+    raise exception 'Brand publishing permission required to schedule posts' using errcode='42501';
+  end if;
+  if length(coalesce(p_payload->>'body','')) > 20000
+    or length(coalesce(p_payload->>'title','')) > 200 then
+    raise exception 'Post title or body exceeds the supported length' using errcode='22023';
+  end if;
+  if jsonb_array_length(coalesce(p_payload->'target_account_ids','[]'::jsonb)) > 20
+    or jsonb_array_length(coalesce(p_payload->'asset_ids','[]'::jsonb)) > 20 then
+    raise exception 'Too many destinations or media assets' using errcode='22023';
+  end if;
   if v_scheduled_at is not null and v_scheduled_at <= now() then
     raise exception 'Scheduled time must be in the future' using errcode='22023';
   end if;
