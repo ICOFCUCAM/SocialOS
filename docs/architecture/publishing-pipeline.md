@@ -92,3 +92,18 @@ Migration `0017_fair_publisher_scheduling.sql` replaces the existing two-argumen
 - Queue rows remain durable in PostgreSQL. Redis is not used as the source of truth for scheduled work.
 
 The advisory lock is deliberately scoped to the claim transaction, not provider execution. Provider calls run concurrently after the claim transaction commits. Monitor claim latency and queue throughput under load before increasing worker concurrency or the workspace cap.
+
+
+## Publishing operations and operator controls
+
+Migration `0018_publishing_operations.sql` adds the operational control plane:
+
+- `publish_job_events` stores durable attempt outcomes and operator actions. Authenticated reads are restricted through the target's post, brand access and organization boundary.
+- `get_publishing_operations_summary(organization_id)` returns tenant-authorized counts for queued, running, retry and dead-letter jobs, 24-hour completions/failures, and the oldest due item.
+- `GET /api/social/publishing/operations?organizationId=...` returns the summary, the latest 50 events, and up to 100 active/dead-letter jobs. It uses the signed-in user's Supabase session and RLS.
+- `POST /api/social/publishing/operations` supports explicit `retry` and `reconcile_published` actions.
+- Manual retry is restricted to workspace owners, administrators, managers and publishers with brand access. It cannot retry `PUBLISH_OUTCOME_UNKNOWN` jobs and cannot exceed the configured attempt limit.
+- Unknown outcomes require a separate reconciliation action. The operator must supply the external post ID verified on the social platform. The transaction updates target/job state, recomputes the parent post status, records an event and writes an audit event.
+- The publisher records published, retry-scheduled, dead-lettered and unknown-outcome events. Event write failures are logged and do not undo a provider publication already completed.
+
+No browser path receives service-role credentials or direct write access to queue/event tables. Do not build a UI that offers a generic retry button for ambiguous outcomes; direct operators to verify the platform first.
