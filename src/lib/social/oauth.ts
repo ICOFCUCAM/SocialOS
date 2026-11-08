@@ -10,8 +10,8 @@ export function getProvider(provider: string): ProviderConfig | null {
   if (provider === "meta") {
     const clientId=process.env.META_CLIENT_ID, clientSecret=process.env.META_CLIENT_SECRET;
     if (!clientId || !clientSecret) return null;
-    return {clientId,clientSecret,authorizeUrl:"https://www.facebook.com/v25.0/dialog/oauth",
-      tokenUrl:"https://graph.facebook.com/v25.0/oauth/access_token",profileUrl:"https://graph.facebook.com/v25.0/me",
+    return {clientId,clientSecret,authorizeUrl:`https://www.facebook.com/${process.env.META_GRAPH_API_VERSION??"v25.0"}/dialog/oauth`,
+      tokenUrl:`https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION??"v25.0"}/oauth/access_token`,profileUrl:`https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION??"v25.0"}/me`,
       scopes:["pages_show_list","pages_read_engagement","pages_manage_posts","instagram_basic","instagram_content_publish"],
       name:"Meta",platformCode:"facebook"};
   }
