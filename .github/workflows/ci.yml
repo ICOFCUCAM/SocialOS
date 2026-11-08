@@ -20,6 +20,10 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Publisher worker syntax and tests
+        run: |
+          node --check workers/publisher/src/worker.mjs
+          npm test --prefix workers/publisher
       - name: TypeScript
         run: npm run typecheck
       - name: ESLint
