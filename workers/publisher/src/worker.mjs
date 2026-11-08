@@ -1,20 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { decryptToken } from "../../../src/lib/social/oauth.js";
+import { createDecipheriv } from "node:crypto";
 import { publishTarget } from "./providers/index.mjs";
 import { PublishError } from "./errors.mjs";
 
-const url = process.env.SUPABASE_URL;
+const supabaseUrl = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
-const db = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+if (!supabaseUrl || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
+const db = createClient(supabaseUrl, key, { auth: { autoRefreshToken: false, persistSession: false } });
 const workerId = process.env.PUBLISH_WORKER_ID || "publisher-" + randomUUID();
 const pollMs = Math.max(500, Number(process.env.PUBLISH_POLL_INTERVAL_MS) || 2500);
 const signedUrlSeconds = Math.max(60, Math.min(900, Number(process.env.PUBLISH_MEDIA_URL_TTL_SECONDS) || 600));
 const maxVideoBytes = Math.max(1, Number(process.env.PUBLISH_MAX_VIDEO_BYTES) || 250 * 1024 * 1024);
 let stopping = false;
 
-function pgBytea(value) {
+function decryptStoredToken(nonce, ciphertext, tag) {\n  const raw = process.env.SOCIAL_TOKEN_ENCRYPTION_KEY;\n  if (!raw) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");\n  const encryptionKey = Buffer.from(raw, "base64");\n  if (encryptionKey.length !== 32) throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY must decode to 32 bytes.");\n  const decipher = createDecipheriv("aes-256-gcm", encryptionKey, nonce);\n  decipher.setAuthTag(tag);\n  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");\n}\nfunction pgBytea(value) {
   if (Buffer.isBuffer(value)) return value;
   if (typeof value !== "string") throw new Error("Encrypted token field is missing.");
   const hex = value.startsWith("\\x") ? value.slice(2) : value;
@@ -49,7 +49,7 @@ async function getToken(account) {
     throw new PublishError("Social account credentials have expired and must be refreshed by reconnecting.", { code: "REAUTHORIZATION_REQUIRED" });
   }
   try {
-    return decryptToken(pgBytea(row.access_token_nonce), pgBytea(row.access_token_ciphertext), pgBytea(row.access_token_tag));
+    return decryptStoredToken(pgBytea(row.access_token_nonce), pgBytea(row.access_token_ciphertext), pgBytea(row.access_token_tag));
   } catch {
     await db.from("social_accounts").update({ connection_status: "error", last_error: "Credential decryption failed." }).eq("id", account.id);
     throw new PublishError("Stored credentials could not be decrypted.", { code: "TOKEN_DECRYPTION_FAILED" });
@@ -141,7 +141,7 @@ async function fail(job, target, error) {
     metadata: { error_code: ambiguous ? "PUBLISH_OUTCOME_UNKNOWN" : code, retryable, terminal }
   });
 }
-async function process(job) {
+async function handleJob(job) {
   let target;
   try {
     const context = await getTarget(job);
@@ -179,7 +179,7 @@ async function process(job) {
 async function poll() {
   const { data, error } = await db.rpc("claim_publish_jobs", { p_worker_id: workerId, p_limit: 1 });
   if (error) throw error;
-  for (const job of data || []) await process(job);
+  for (const job of data || []) await handleJob(job);
   return (data || []).length;
 }
 process.on("SIGTERM", () => { stopping = true; });
