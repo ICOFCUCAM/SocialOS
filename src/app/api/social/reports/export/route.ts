@@ -36,8 +36,6 @@ export async function GET(request: NextRequest) {
   const { data: targets, error: targetsError } = await supabase.from("social_post_targets")
     .select("id,post_id,social_account_id,status,published_at,platform_post_id")
     .eq("organization_id", membership.organization_id).eq("status", "published")
-    .gte("published_at", from + "T00:00:00.000Z")
-    .lt("published_at", new Date(Date.parse(to + "T00:00:00Z") + 86400000).toISOString())
     .limit(5000);
   if (targetsError) return NextResponse.json({ error: "Report data is temporarily unavailable." }, { status: 500 });
 
