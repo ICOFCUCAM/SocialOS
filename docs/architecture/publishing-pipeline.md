@@ -79,3 +79,16 @@ The publisher distinguishes explicit provider quota signals from generic HTTP fa
 - Generic HTTP 429 continues to respect `Retry-After`. No provider quota values or universal thresholds are hard-coded.
 
 The quota parsers are advisory inputs to the Redis cooldown coordinator. PostgreSQL remains the durable queue; provider usage data and reset times are not treated as a substitute for provider-side quota documentation or application approval.
+
+
+## Fair multi-workspace scheduling and concurrency
+
+Migration `0017_fair_publisher_scheduling.sql` replaces the existing two-argument `claim_publish_jobs(worker_id, limit)` implementation with a compatibility wrapper over the fair scheduler. Existing worker callers therefore continue using the same RPC contract.
+
+- PostgreSQL remains the queue and concurrency arbiter. A transaction-scoped advisory lock serializes the short claim operation across replicas so the per-workspace running-job cap cannot be exceeded by simultaneous claimers.
+- Claims rotate across eligible organizations using a service-only `publish_organization_fairness` cursor. Each claim re-evaluates the least-recently-served eligible workspace before selecting its oldest due job.
+- The default workspace in-flight cap is three jobs across all publisher replicas. The internal three-argument claim function allows controlled service-side tuning; the public worker wrapper uses the default.
+- A worker claims up to `PUBLISH_CONCURRENCY` jobs (default 5, bounded 1–20) and processes the returned batch concurrently. PostgreSQL still enforces the workspace cap even when several workers are running.
+- Queue rows remain durable in PostgreSQL. Redis is not used as the source of truth for scheduled work.
+
+The advisory lock is deliberately scoped to the claim transaction, not provider execution. Provider calls run concurrently after the claim transaction commits. Monitor claim latency and queue throughput under load before increasing worker concurrency or the workspace cap.
