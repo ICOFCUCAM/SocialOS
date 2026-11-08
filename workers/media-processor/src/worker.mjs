@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -91,8 +91,27 @@ async function processAsset(job) {
         throw Object.assign(new Error("Video stream, duration or dimensions exceed limits"), { code: "VIDEO_LIMIT" });
       const poster = path.join(dir, "poster.jpg");
       await command("ffmpeg", ["-nostdin","-v","error","-i",input,"-ss","1","-frames:v","1","-vf","scale=1280:-2","-q:v","3","-y",poster], 60000);
-      const derivative = await put(asset.organization_id + "/" + asset.brand_id + "/" + asset.id + "/poster.jpg", poster, "image/jpeg");
-      result = { kind: "video", width: stream.width, height: stream.height, durationMs: Math.round(duration * 1000), derivatives: [derivative] };
+      const posterDerivative = await put(asset.organization_id + "/" + asset.brand_id + "/" + asset.id + "/poster.jpg", poster, "image/jpeg");
+
+      // Create a broadly compatible H.264/AAC mezzanine for downstream platform adapters.
+      const mezzanine = path.join(dir, "mezzanine.mp4");
+      await command("ffmpeg", [
+        "-nostdin","-v","error","-i",input,
+        "-map","0:v:0","-map","0:a:0?",
+        "-vf","scale='min(1920,iw)':-2",
+        "-c:v","libx264","-preset","veryfast","-crf","23","-pix_fmt","yuv420p",
+        "-c:a","aac","-b:a","128k","-movflags","+faststart","-f","mp4","-y",mezzanine
+      ], 15 * 60 * 1000);
+      const mezzanineInfo = await stat(mezzanine);
+      if (!mezzanineInfo.size || mezzanineInfo.size > maxBytes) {
+        throw Object.assign(new Error("Transcoded video exceeds the derivative size limit"), { code: "DERIVATIVE_SIZE_LIMIT" });
+      }
+      const videoDerivative = await put(asset.organization_id + "/" + asset.brand_id + "/" + asset.id + "/mezzanine.mp4", mezzanine, "video/mp4");
+      result = {
+        kind: "video", width: stream.width, height: stream.height,
+        durationMs: Math.round(duration * 1000),
+        derivatives: [posterDerivative, videoDerivative]
+      };
     }
     await update("social_media_assets", asset.id, {
       processing_status: "ready", width: result.width, height: result.height,
