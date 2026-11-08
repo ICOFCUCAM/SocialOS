@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     status: "queued",
     idempotency_key: `media-asset:${asset.id}:process:v1`,
     available_at: new Date().toISOString(),
-  }, { onConflict: "asset_id" });
+  }, { onConflict: "asset_id", ignoreDuplicates: true });
   if (queueError) return NextResponse.json({ error: "Upload verified but media processing could not be queued." }, { status: 503 });
 
   return NextResponse.json({
