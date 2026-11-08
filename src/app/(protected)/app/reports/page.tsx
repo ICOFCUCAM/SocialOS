@@ -46,29 +46,61 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const previousTo = iso(new Date(Date.parse(from + "T00:00:00Z") - 86400000));
   const previousFrom = iso(new Date(Date.parse(from + "T00:00:00Z") - days * 86400000));
 
-  const { data: targets, error: targetsError } = await supabase.from("social_post_targets")
-    .select("id,social_account_id").eq("organization_id", member.organization_id).eq("status", "published").limit(5000);
-  if (targetsError) throw new Error("Reporting destinations are unavailable.");
-  const targetRows = (targets ?? []) as TargetRow[];
+  const PAGE_SIZE = 1000;
+  const MAX_TARGETS = 50000;
+  const MAX_METRICS = 100000;
+  const targetRows: TargetRow[] = [];
+  for (let offset = 0; offset <= MAX_TARGETS; offset += PAGE_SIZE) {
+    const { data, error } = await supabase.from("social_post_targets")
+      .select("id,social_account_id").eq("organization_id", member.organization_id)
+      .eq("status", "published").order("id", { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (error) throw new Error("Reporting destinations are unavailable.");
+    targetRows.push(...(data ?? []));
+    if (!data || data.length < PAGE_SIZE) break;
+    if (targetRows.length > MAX_TARGETS) throw new Error("This report exceeds the 50,000-destination interactive limit. Narrow the reporting scope.");
+  }
+  if (targetRows.length > MAX_TARGETS) throw new Error("This report exceeds the 50,000-destination interactive limit. Narrow the reporting scope.");
   const targetIds = targetRows.map(row => row.id);
   const accountIds = [...new Set(targetRows.map(row => row.social_account_id))];
 
-  const [{ data: accounts }, { data: metrics, error: metricsError }] = await Promise.all([
-    accountIds.length ? supabase.from("social_accounts").select("id,platform_id").eq("organization_id", member.organization_id).in("id", accountIds) : Promise.resolve({ data: [] as AccountRow[] }),
-    targetIds.length ? supabase.from("social_post_analytics_daily").select("target_id,metric_date,impressions,reach,engagements,clicks")
-      .eq("organization_id", member.organization_id).eq("period_type", "daily").in("target_id", targetIds)
-      .gte("metric_date", previousFrom).lte("metric_date", to).order("metric_date", { ascending: true }).limit(40000)
-      : Promise.resolve({ data: [] as MetricRow[], error: null })
-  ]);
-  if (metricsError) throw new Error("Provider reporting data is unavailable.");
-  const accountRows = (accounts ?? []) as AccountRow[];
+  const accountRows: AccountRow[] = [];
+  for (let index = 0; index < accountIds.length; index += 200) {
+    const { data, error } = await supabase.from("social_accounts").select("id,platform_id")
+      .eq("organization_id", member.organization_id).in("id", accountIds.slice(index, index + 200));
+    if (error) throw new Error("Connected account metadata is unavailable.");
+    accountRows.push(...(data ?? []));
+  }
+
+  const metricRows: MetricRow[] = [];
+  for (let index = 0; index < targetIds.length; index += 200) {
+    const ids = targetIds.slice(index, index + 200);
+    for (let offset = 0; offset <= MAX_METRICS; offset += PAGE_SIZE) {
+      const { data, error } = await supabase.from("social_post_analytics_daily")
+        .select("target_id,metric_date,impressions,reach,engagements,clicks")
+        .eq("organization_id", member.organization_id).eq("period_type", "daily")
+        .in("target_id", ids).gte("metric_date", previousFrom).lte("metric_date", to)
+        .order("metric_date", { ascending: true }).order("target_id", { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw new Error("Provider reporting data is unavailable.");
+      metricRows.push(...(data ?? []));
+      if (!data || data.length < PAGE_SIZE) break;
+      if (metricRows.length > MAX_METRICS) throw new Error("This report exceeds the 100,000-row interactive limit. Narrow the reporting period.");
+    }
+    if (metricRows.length > MAX_METRICS) throw new Error("This report exceeds the 100,000-row interactive limit. Narrow the reporting period.");
+  }
   const platformIds = [...new Set(accountRows.map(row => row.platform_id))];
-  const { data: platforms } = platformIds.length ? await supabase.from("social_platforms").select("id,code").in("id", platformIds) : { data: [] as PlatformRow[] };
-  const codeById = new Map(((platforms ?? []) as PlatformRow[]).map(row => [row.id, row.code]));
+  const platformRows: PlatformRow[] = [];
+  for (let index = 0; index < platformIds.length; index += 200) {
+    const { data, error } = await supabase.from("social_platforms").select("id,code").in("id", platformIds.slice(index, index + 200));
+    if (error) throw new Error("Platform metadata is unavailable.");
+    platformRows.push(...(data ?? []));
+  }
+  const codeById = new Map(platformRows.map(row => [row.id, row.code]));
   const platformByAccount = new Map(accountRows.map(row => [row.id, codeById.get(row.platform_id) ?? "unknown"]));
   const platformByTarget = new Map(targetRows.map(row => [row.id, platformByAccount.get(row.social_account_id) ?? "unknown"]));
 
-  const rows = (metrics ?? []) as MetricRow[];
+  const rows = metricRows;
   const codes = [...new Set(rows.map(row => platformByTarget.get(row.target_id) ?? "unknown"))].sort();
   const reports = codes.map(code => {
     const providerRows = rows.filter(row => platformByTarget.get(row.target_id) === code);
