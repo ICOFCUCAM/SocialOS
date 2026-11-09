@@ -1,13 +1,13 @@
 name: SocialOS database validation
 
 on:
+  # Validate feature-branch changes through the PR event only. Running both
+  # push and pull_request for the same commit created duplicate DB stacks.
   push:
     branches:
-      - integration/socialos-feature-stack
       - main
   pull_request:
     branches:
-      - integration/socialos-feature-stack
       - main
   workflow_dispatch:
 
