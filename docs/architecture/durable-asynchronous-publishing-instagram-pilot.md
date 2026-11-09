@@ -88,8 +88,8 @@ Use a fake provider and deterministic clock. Cover:
 
 Before adding the migration or enabling this path:
 
-1. Resolve the duplicate migration version `0016`: both `0016_account_specific_content_versions.sql` and `0016_post_analytics.sql` currently exist. Confirm the repository's migration application history before renumbering; do not rename an already-applied migration in a deployed database.
-2. Diagnose the failed CI run on the current PR #33 head (`3678baf4bfdd84b77f999d606c478f4d38fbd669`). The Actions API currently reports failure but does not expose step details in the returned job record.
-3. Replay the complete migration chain against a clean disposable PostgreSQL/Supabase-compatible database and run publisher tests before opening this feature for review.
+1. The repository migration collision has been resolved in PR #33: account-specific versions is now `0017_account_specific_content_versions.sql`, fair scheduling is `0018_fair_publisher_scheduling.sql`, and publishing operations is `0019_publishing_operations.sql`. The existing analytics migration remains `0016_post_analytics.sql`. The hosted SocialOS project currently records only migrations `0001`–`0007`; no migration has been applied to the hosted project as part of this work.
+2. Diagnose the failed CI run on PR #33. GitHub reports the job as failed, but the available Actions log endpoint returned a missing-blob response, so the underlying failing step remains unverified.
+3. Replay the complete ordered migration chain against a clean disposable PostgreSQL/Supabase-compatible database and run publisher tests before opening this feature for review.
 
 This document records the implementation contract only. It does not claim that asynchronous publishing has been implemented, that migrations have been applied, or that tests pass.
