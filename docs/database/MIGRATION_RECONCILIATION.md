@@ -97,7 +97,7 @@ This report records what was observed through the connected GitHub and Supabase 
 ## 7. Validation automation added
 
 The integration branch now includes:
-- `.github/workflows/database-validation.yml`: local Supabase startup, clean migration replay, migration count, schema/security smoke test, database lint and generated TypeScript type check.
+- `.github/workflows/database-validation.yml`: local Supabase startup, clean migration replay, dynamic migration inventory, schema/security smoke test, database lint and generated TypeScript type check.
 - `supabase/tests/migration_smoke.sql`: verifies required tables, RLS enablement, worker RPC presence, private media bucket configuration and privileged RPC execution restrictions.
 - `docs/development/LOCAL_DATABASE_VALIDATION.md`: exact safe local commands and evidence checklist.
 - Local Storage configuration raised to 250 MiB to match the private media bucket limit in migration 0009.
@@ -106,7 +106,7 @@ The integration branch now includes:
 
 GitHub Actions created runs for both the existing application CI and the new database-validation workflow, but the jobs failed before starting a runner: the GitHub job records show `runner_id = 0` and empty `steps`. No SQL migration step ran, so this is not evidence of a migration SQL failure or success. The run logs were not available from the connector.
 
-The current execution environment also has no Docker executable, so a local Supabase replay could not be run here. The validation workflow and instructions are committed, but **the 16-migration replay remains unverified** until a Docker-capable runner actually executes the job.
+The current execution environment also has no Docker executable, so a local Supabase replay could not be run here. The validation workflow and instructions are committed, but **the 17-migration replay remains unverified** until a Docker-capable runner actually executes the job. The fixed file-count assertion has since been removed; the workflow now reports the migration inventory and relies on clean replay plus the schema/security checks as the substantive validation.
 
 
 ## 8. Additional tenant-suspension guard
