@@ -31,6 +31,7 @@ jobs:
           node --check workers/publisher/src/errors.mjs
           node --check workers/publisher/src/content-version.mjs
           node --check workers/publisher/src/provider-operation-state.mjs
+          node --check workers/publisher/src/providers/meta.mjs
           node --check workers/publisher/src/providers/index.mjs
           node --check workers/analytics-collector/src/collector.mjs
           node --check workers/analytics-collector/src/meta-insights.mjs
