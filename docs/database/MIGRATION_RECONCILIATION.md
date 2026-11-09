@@ -121,3 +121,17 @@ Migration 0017_enforce_active_tenant_state.sql now:
 The local smoke test now additionally verifies that private tenant helpers are not exposed through the public schema, anonymous users cannot execute the private authorization helper, and browser roles cannot read encrypted OAuth token records.
 
 This is a code-level remediation committed to the integration branch. It has not yet been executed against a clean local database or production. The automated GitHub jobs are still failing before runner assignment, so SQL execution remains unverified.
+
+
+## 9. Multi-tenant regression test added
+
+Added `supabase/tests/tenant_isolation.sql` and wired it into the database-validation workflow. The test creates disposable Tenant A and Tenant B fixtures and checks:
+- Tenant A owner cannot read Tenant B organizations or brands.
+- Tenant B's explicitly assigned brand editor can read that brand while Tenant B is active, but cannot read Tenant A's brand.
+- The same Tenant B editor loses brand access immediately when Tenant B is suspended, even though the brand membership row remains active.
+- Post creation is rejected for a suspended tenant.
+- A workspace viewer cannot create posts in an active tenant.
+
+The test runs inside a transaction and rolls back its fixtures. It is intended for the disposable local Supabase database only. The GitHub workflow and local validation guide now run this test after the schema smoke test.
+
+**Execution status:** committed test code, not yet executed. The latest observed GitHub Actions runs still fail before a runner is assigned; no passing result is claimed.
