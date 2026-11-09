@@ -81,9 +81,13 @@ The publisher distinguishes explicit provider quota signals from generic HTTP fa
 The quota parsers are advisory inputs to the Redis cooldown coordinator. PostgreSQL remains the durable queue; provider usage data and reset times are not treated as a substitute for provider-side quota documentation or application approval.
 
 
+## Account-specific content versions
+
+Migration `0017_account_specific_content_versions.sql` adds tenant-scoped shared and destination-specific post versions and ordered media attachments. It backfills existing posts and legacy target overrides, then exposes an authenticated transactional creation RPC so scheduled jobs cannot observe a post without its content snapshots.
+
 ## Fair multi-workspace scheduling and concurrency
 
-Migration `0017_fair_publisher_scheduling.sql` replaces the existing two-argument `claim_publish_jobs(worker_id, limit)` implementation with a compatibility wrapper over the fair scheduler. Existing worker callers therefore continue using the same RPC contract.
+Migration `0018_fair_publisher_scheduling.sql` replaces the existing two-argument `claim_publish_jobs(worker_id, limit)` implementation with a compatibility wrapper over the fair scheduler. Existing worker callers therefore continue using the same RPC contract.
 
 - PostgreSQL remains the queue and concurrency arbiter. A transaction-scoped advisory lock serializes the short claim operation across replicas so the per-workspace running-job cap cannot be exceeded by simultaneous claimers.
 - Claims rotate across eligible organizations using a service-only `publish_organization_fairness` cursor. Each claim re-evaluates the least-recently-served eligible workspace before selecting its oldest due job.
@@ -96,7 +100,7 @@ The advisory lock is deliberately scoped to the claim transaction, not provider 
 
 ## Publishing operations and operator controls
 
-Migration `0018_publishing_operations.sql` adds the operational control plane:
+Migration `0019_publishing_operations.sql` adds the operational control plane:
 
 - `publish_job_events` stores durable attempt outcomes and operator actions. Authenticated reads are restricted through the target's post, brand access and organization boundary.
 - `get_publishing_operations_summary(organization_id)` returns tenant-authorized counts for queued, running, retry and dead-letter jobs, 24-hour completions/failures, and the oldest due item.
