@@ -1,6 +1,10 @@
 -- Durable provider-side operations for asynchronous publishing.
 -- Extends the existing publish_jobs outbox; this is not a second post queue.
 
+-- A job remains durable while its remote provider operation is processing,
+-- but it is not reclaimed as a new publish attempt.
+alter type public.publish_job_status add value if not exists 'awaiting_provider';
+
 -- Composite keys let provider operations prove that their job, target and
 -- connected account all belong to the same organization.
 alter table public.publish_jobs
