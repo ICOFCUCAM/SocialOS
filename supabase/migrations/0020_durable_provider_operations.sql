@@ -147,19 +147,41 @@ as $$
 declare
   v_recovered integer := 0;
 begin
-  update public.publish_provider_operations
-  set state = 'outcome_unknown',
-      locked_at = null,
-      locked_by = null,
-      next_action_at = null,
-      last_error_code = 'PROVIDER_OPERATION_OUTCOME_UNKNOWN',
-      last_error_message = 'A provider side-effect request lost its worker lease. Verify the provider outcome before taking further action.'
-  where state in ('submit_started','finalize_started')
-    and locked_at is not null
-    and locked_at < now() - make_interval(secs => greatest(30, least(coalesce(p_lease_seconds,120),600)));
+  with uncertain as (
+    update public.publish_provider_operations
+    set state = 'outcome_unknown',
+        locked_at = null,
+        locked_by = null,
+        next_action_at = null,
+        last_error_code = 'PROVIDER_OPERATION_OUTCOME_UNKNOWN',
+        last_error_message = 'A provider side-effect request lost its worker lease. Verify the provider outcome before taking further action.'
+    where state in ('submit_started','finalize_started')
+      and locked_at is not null
+      and locked_at < now() - make_interval(secs => greatest(30, least(coalesce(p_lease_seconds,120),600)))
+    returning id, organization_id, job_id, target_id
+  ), jobs as (
+    update public.publish_jobs j
+    set status = 'dead_letter',
+        locked_at = null,
+        locked_by = null,
+        completed_at = now(),
+        last_error_code = 'PUBLISH_OUTCOME_UNKNOWN',
+        last_error_message = 'Provider submission/finalization lost its worker lease. Reconcile externally before retrying.'
+    from uncertain u
+    where j.id = u.job_id and j.organization_id = u.organization_id
+    returning j.id, j.organization_id, j.target_id, j.attempt_count
+  ), targets as (
+    update public.social_post_targets t
+    set status = 'failed',
+        last_error_code = 'PUBLISH_OUTCOME_UNKNOWN',
+        last_error_message = 'Provider outcome is uncertain. Verify the platform before retrying.'
+    from jobs j
+    where t.id = j.target_id and t.organization_id = j.organization_id
+    returning t.id
+  )
+  select count(*)::integer into v_recovered from jobs;
 
-  get diagnostics v_recovered = row_count;
-  return v_recovered;
+  return coalesce(v_recovered, 0);
 end;
 $$;
 
