@@ -30,6 +30,25 @@ begin
     end if;
   end loop;
 
+  if to_regprocedure('private.can_access_brand(uuid,uuid)') is null then
+    raise exception 'Missing private tenant brand-access helper';
+  end if;
+  if to_regprocedure('public.is_org_member(uuid)') is not null
+     or to_regprocedure('public.has_org_role(uuid,text[])') is not null
+     or to_regprocedure('public.can_access_brand(uuid,uuid)') is not null then
+    raise exception 'Legacy tenant helpers remain in the exposed public schema';
+  end if;
+  if has_function_privilege('anon','private.can_access_brand(uuid,uuid)','EXECUTE') then
+    raise exception 'Anonymous role can execute private tenant authorization helper';
+  end if;
+  if has_table_privilege('anon','public.social_account_tokens','SELECT')
+     or has_table_privilege('authenticated','public.social_account_tokens','SELECT') then
+    raise exception 'Browser role can read encrypted OAuth token records';
+  end if;
+  if not has_table_privilege('service_role','public.social_account_tokens','SELECT') then
+    raise exception 'Service role cannot read OAuth token records';
+  end if;
+
   if to_regprocedure('public.claim_publish_jobs(text,integer)') is null then
     raise exception 'Missing publish job claim RPC';
   end if;
