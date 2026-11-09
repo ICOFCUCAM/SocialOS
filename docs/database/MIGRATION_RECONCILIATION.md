@@ -107,3 +107,17 @@ The integration branch now includes:
 GitHub Actions created runs for both the existing application CI and the new database-validation workflow, but the jobs failed before starting a runner: the GitHub job records show `runner_id = 0` and empty `steps`. No SQL migration step ran, so this is not evidence of a migration SQL failure or success. The run logs were not available from the connector.
 
 The current execution environment also has no Docker executable, so a local Supabase replay could not be run here. The validation workflow and instructions are committed, but **the 16-migration replay remains unverified** until a Docker-capable runner actually executes the job.
+
+
+## 8. Additional tenant-suspension guard
+
+The follow-up security review identified an authorization gap in the original private.can_access_brand helper: the direct brand-member branch checked active membership but did not independently require the parent organization to be active and not deleted. The scheduled-post creation RPC also checked membership but did not explicitly reject suspended/deleted organizations.
+
+Migration 0017_enforce_active_tenant_state.sql now:
+- Requires the organization to be active and not soft-deleted for every brand-access path.
+- Requires an active organization before the authenticated post-creation RPC can create posts or enqueue publishing jobs.
+- Preserves the existing role and brand membership checks.
+
+The local smoke test now additionally verifies that private tenant helpers are not exposed through the public schema, anonymous users cannot execute the private authorization helper, and browser roles cannot read encrypted OAuth token records.
+
+This is a code-level remediation committed to the integration branch. It has not yet been executed against a clean local database or production. The automated GitHub jobs are still failing before runner assignment, so SQL execution remains unverified.
