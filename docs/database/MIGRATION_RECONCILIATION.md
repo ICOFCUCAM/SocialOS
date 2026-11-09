@@ -135,3 +135,53 @@ Added `supabase/tests/tenant_isolation.sql` and wired it into the database-valid
 The test runs inside a transaction and rolls back its fixtures. It is intended for the disposable local Supabase database only. The GitHub workflow and local validation guide now run this test after the schema smoke test.
 
 **Execution status:** committed test code, not yet executed. The latest observed GitHub Actions runs still fail before a runner is assigned; no passing result is claimed.
+
+
+## 10. Authoritative migration filename and timestamp correction (2026-11-10)
+
+A follow-up check against the Supabase CLI reference identified that the prior statement that the repository filenames were aligned was incomplete: matching descriptive names is not sufficient. Supabase compares the 14-digit migration timestamps, not the descriptive suffixes. The repository's old `0001_...` through `0017_...` filenames did not satisfy the CLI's timestamp convention.
+
+### Corrected repository inventory
+
+The integration branch now contains exactly these 17 SQL migration files, ordered by the 14-digit timestamp:
+
+| Timestamp / version | Migration |
+|---|---|
+| 20261108174627 | core_tenancy |
+| 20261108174659 | tenant_rls |
+| 20261108174707 | explicit_table_privileges |
+| 20261108174848 | revoke_anon_function_execution |
+| 20261108175020 | profiles_and_auth_onboarding |
+| 20261108175537 | atomic_workspace_onboarding |
+| 20261108175641 | private_tenant_helpers |
+| 20261110000100 | publishing_pipeline |
+| 20261110000150 | private_media_storage |
+| 20261110000200 | media_worker_lease_recovery |
+| 20261110000300 | publish_worker_lease_recovery |
+| 20261110000400 | oauth_token_refresh_lock |
+| 20261110000500 | atomic_social_account_disconnect |
+| 20261110000600 | safe_manual_publish_retry |
+| 20261110000700 | campaign_management |
+| 20261110000800 | post_analytics |
+| 20261110000900 | enforce_active_tenant_state |
+
+The first seven filenames use the exact seven version timestamps observed in the hosted ledger. The ten pending migrations have unique timestamps later than the hosted baseline, and their order preserves their SQL dependencies. All previous non-timestamp `0001_...` through `0017_...` migration files have been removed from this branch after their SQL contents were copied into the timestamped files.
+
+### What this fixes and what it does not
+
+- Fixes the local migration filename convention and the version ordering used by the Supabase CLI.
+- Makes the local migration list comparable to the hosted seven-version ledger by timestamp.
+- Does **not** prove that the first seven SQL files are byte-for-byte the SQL that originally ran on production. The hosted ledger stores version/name metadata, not a cryptographic checksum of the original migration file.
+- Does **not** prove that the current hosted schema has no manual drift. The live schema comparison still needs a full diff, including objects not covered by the read-only inventory.
+- Does **not** apply, repair, delete, or rewrite any production migration history.
+- Does **not** apply migrations 0008–0017 to production.
+
+### Required next validation
+
+On a Docker-capable runner, run `supabase migration list` after linking the intended project only if the environment is configured safely, and first inspect the local/remote comparison. For a disposable local database, run `supabase start` followed by `supabase db reset`; verify that all 17 timestamped migrations replay in order, then run the schema smoke test, tenant-isolation tests, database lint and generated type check.
+
+Do not use `supabase migration repair` to mark any migration applied or reverted until an object-by-object comparison proves the corresponding SQL state. `migration repair` changes only migration tracking metadata; it does not execute migration SQL. Do not run `supabase db push` against production as a diagnostic.
+
+**Current status:** filename/timestamp normalization is committed and the branch inventory has been verified through GitHub. Clean replay is still unverified because the Actions runner has not executed a job. Production remains unchanged.
+
+Reference: [Supabase CLI — List local and remote migrations](https://supabase.com/docs/reference/cli/supabase-migration-list).
