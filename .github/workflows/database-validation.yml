@@ -47,6 +47,9 @@ jobs:
         run: |
           supabase db query --local -f supabase/tests/migration_smoke.sql
 
+      - name: Run multi-tenant isolation regression tests
+        run: supabase db query --local -f supabase/tests/tenant_isolation.sql
+
       - name: Lint local database schema
         run: supabase db lint --local --fail-on error
 
