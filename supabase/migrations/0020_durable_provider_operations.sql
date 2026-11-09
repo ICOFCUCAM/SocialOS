@@ -57,6 +57,16 @@ create table public.publish_provider_operations (
     check ((locked_at is null and locked_by is null) or (locked_at is not null and locked_by is not null))
 );
 
+-- Provider-issued IDs must not be attached to two logical operations for
+-- the same connected account. NULL remains valid before Meta returns an ID.
+create unique index publish_provider_operations_remote_id_uidx
+  on public.publish_provider_operations(provider, social_account_id, remote_operation_id)
+  where remote_operation_id is not null;
+
+create unique index publish_provider_operations_external_post_uidx
+  on public.publish_provider_operations(provider, social_account_id, external_post_id)
+  where external_post_id is not null;
+
 create index publish_provider_operations_due_idx
   on public.publish_provider_operations(next_action_at, created_at)
   where state = 'processing';
