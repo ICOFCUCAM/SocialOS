@@ -78,7 +78,7 @@ The order is dependency-sensitive. In particular, 0009 depends on 0008's `social
 
 ### Operational requirements
 - Back up production and verify the backup before any rollout.
-- Build a clean local database by replaying migrations 0001–0016 in order.
+- Build a clean local database by replaying migrations 0001–0017 in order.
 - Compare the resulting schema, policies, grants, triggers, functions, constraints and storage configuration with the expected definitions.
 - Test upload signing, media validation, job claiming, lease expiry, publish retry, OAuth refresh contention, campaign access and analytics RLS.
 - Apply production migrations only after the clean replay and security tests pass.
