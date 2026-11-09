@@ -71,11 +71,13 @@ end $$;
 
 reset role;
 
--- Suspend Tenant B as the trusted migration/test role. The brand membership
--- remains active, so access must now be denied by the organization-state guard.
+-- Suspend Tenant B as the service role so the production guard trigger accepts
+-- this trusted administrative state change. The brand membership remains active.
+set local role service_role;
 update public.organizations
 set status='suspended'
 where id='b0000000-0000-4000-8000-000000000002';
+reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-4000-8000-000000000002',true);
