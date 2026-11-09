@@ -38,6 +38,7 @@ Expected result: all 17 migration files apply without SQL errors.
 
 ```bash
 supabase db query --local -f supabase/tests/migration_smoke.sql
+supabase db query --local -f supabase/tests/tenant_isolation.sql
 supabase db lint --local --fail-on error
 supabase gen types typescript --local > /tmp/socialos.types.ts
 test -s /tmp/socialos.types.ts
