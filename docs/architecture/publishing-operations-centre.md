@@ -39,7 +39,7 @@ The publishing worker must be deployed and configured separately. A dashboard sh
 
 ## Operations dashboard integration
 
-The existing `/app/publishing` workspace page now consumes the operational summary and recent event history introduced in migration 0018. It adds 24-hour delivery/dead-letter metrics, oldest overdue job, retry count and a recent event timeline.
+The existing `/app/publishing` workspace page now consumes the operational summary and recent event history introduced in migration 0019. It adds 24-hour delivery/dead-letter metrics, oldest overdue job, retry count and a recent event timeline.
 
 Known retryable failures use the authenticated `/api/social/publishing/operations` action and the tenant-authorized `operator_retry_publish_job` RPC. The page does not expose a retry action for ambiguous provider outcomes.
 
