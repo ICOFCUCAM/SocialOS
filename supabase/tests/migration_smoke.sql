@@ -13,7 +13,7 @@ declare
   tbl text;
 begin
   select array_agg(name) into missing
-  from unnest(required_tables) as name
+  from unnest(required_tables) as t(name)
   where to_regclass('public.' || name) is null;
 
   if missing is not null then
