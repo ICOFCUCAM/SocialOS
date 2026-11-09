@@ -49,3 +49,10 @@ The database-validation workflow is configured to run for pull requests targetin
 ## Production boundary
 
 Do not merge PR #29, apply migrations to the hosted project, or connect live social accounts until the local replay and security tests have completed successfully and the evidence is attached to the PR.
+
+
+## Minimal runner probe added
+
+A minimal workflow exists at `.github/workflows/runner-diagnostic.yml`. It runs only when manually dispatched, so it does not add another permanent failing check to every pull request. It requests one `ubuntu-latest` runner and executes simple shell commands; it does not start Docker or touch Supabase.
+
+The probe was triggered by a pull-request event during diagnosis and failed in the same way: GitHub created a run/job record, but the step API returned an empty list and no downloadable logs were available. This does not identify the underlying cause. After the repository/organization Actions settings have been checked and corrected, run this probe manually first. Only when it shows the shell step completed should the full database-validation workflow be retried.
