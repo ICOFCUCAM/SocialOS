@@ -247,7 +247,7 @@ Start with Phase 0 verification and a YouTube vertical-slice technical design. B
 
 ## 12. Research provenance
 
-Primary repository inventory and detailed notes: `docs/research/social-media-youtube-github-repository-audit.md`.
+Primary repository inventory and detailed notes: [Full repository inventory and detailed notes](https://github.com/ICOFCUCAM/SocialOS/blob/main/docs/research/social-media-youtube-github-repository-audit.md).
 
 Key direct references:
 - https://github.com/gitroomhq/postiz-app
