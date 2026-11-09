@@ -292,7 +292,14 @@ async function startInstagramVideoOperation(job, target, context, token, media) 
     }).select("*").single(), "Unable to create durable Instagram provider operation");
   }
   if (operation.state !== "prepared") {
-    if (operation.state === "processing" || operation.state === "finalize_started" || operation.state === "published") return;
+    if (operation.state === "processing" || operation.state === "finalize_started") {
+      await must(await db.from("publish_jobs").update({
+        status: "awaiting_provider", locked_at: null, locked_by: null, completed_at: null
+      }).eq("id", job.id).eq("organization_id", job.organization_id),
+      "Unable to restore job to provider-polling state");
+      return;
+    }
+    if (operation.state === "published") return;
     throw new PublishError("Instagram provider operation requires manual reconciliation.", {
       code: "PUBLISH_OUTCOME_UNKNOWN", ambiguous: true
     });
@@ -395,7 +402,7 @@ async function pollInstagramProviderOperations() {
           last_error_message: "Instagram media container processing failed."
         }).eq("id", operation.target_id).eq("organization_id", operation.organization_id),
         "Unable to fail rejected Instagram target");
-        await refreshPostStatus(operation.job_id ? context.post.id : context.post.id, operation.organization_id);
+        await refreshPostStatus(context.post.id, operation.organization_id);
         return;
       }
 
@@ -422,6 +429,15 @@ async function pollInstagramProviderOperations() {
           last_error_code: "PUBLISH_OUTCOME_UNKNOWN",
           last_error_message: "Instagram finalization outcome is uncertain; reconcile externally before retrying."
         }).eq("id", operation.job_id).eq("organization_id", operation.organization_id);
+        await db.from("social_post_targets").update({
+          status: "failed", last_error_code: "PUBLISH_OUTCOME_UNKNOWN",
+          last_error_message: "Instagram finalization outcome is uncertain; reconcile externally before retrying."
+        }).eq("id", operation.target_id).eq("organization_id", operation.organization_id);
+        await recordJobEvent(job, context.target, "outcome_unknown", {
+          code: "PUBLISH_OUTCOME_UNKNOWN",
+          message: "Instagram finalization outcome requires manual reconciliation.",
+          metadata: { provider_operation_id: operation.id }
+        });
         return;
       }
       await must(await db.rpc("finalize_publish_provider_operation", {
