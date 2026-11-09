@@ -97,7 +97,7 @@ export async function GET(_request:NextRequest,{params}:{params:Promise<{campaig
    }
    if(["instagram","youtube"].includes(platform?.code??"")&&mediaRows.length===0)postFindings.push({code:"PLATFORM_MEDIA_REQUIRED",severity:"blocker",title:"Media required",detail:"This publishing destination requires media.",postId:post.id,accountId:target.social_account_id});
   }
-  return {postId:post.id,title:post.title,status:post.status,destinations:ownTargets.length,findings:postFindings,status:postFindings.some(f=>f.severity==="blocker")?"blocked":postFindings.some(f=>f.severity==="warning")?"review":"ready"};
+  return {postId:post.id,title:post.title,postStatus:post.status,destinations:ownTargets.length,findings:postFindings,status:postFindings.some(f=>f.severity==="blocker")?"blocked":postFindings.some(f=>f.severity==="warning")?"review":"ready"};
  });
  findings.push(...postSummaries.flatMap(p=>p.findings));
  const scheduled=postRows.filter(p=>p.scheduled_at||targetRows.some(t=>t.post_id===p.id&&t.scheduled_at)).length;
