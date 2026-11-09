@@ -41,7 +41,7 @@ jobs:
       - name: Verify migration ledger
         run: |
           supabase migration list
-          test "$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)" -eq 16
+          test "$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)" -eq 17
 
       - name: Verify schema and security invariants
         run: |
