@@ -373,10 +373,38 @@ async function pollInstagramProviderOperations() {
       const statusCode = await getInstagramContainerStatus({ token, remoteOperationId: operation.remote_operation_id });
       const status = classifyInstagramContainerStatus(statusCode);
       if (status.outcome === "pending" || status.outcome === "unknown") {
+        const nextPollCount = operation.poll_count + 1;
+        if (status.outcome === "unknown" && nextPollCount >= 40) {
+          await must(await db.from("publish_provider_operations").update({
+            state: "outcome_unknown", next_action_at: null, poll_count: nextPollCount,
+            locked_at: null, locked_by: null, completed_at: new Date().toISOString(),
+            last_error_code: status.code,
+            last_error_message: "Instagram returned an unrecognized container status repeatedly. Manual reconciliation is required."
+          }).eq("id", operation.id).eq("state", "processing").eq("locked_by", workerId),
+          "Unable to mark unrecognized Instagram operation for reconciliation");
+          await must(await db.from("publish_jobs").update({
+            status: "dead_letter", locked_at: null, locked_by: null, completed_at: new Date().toISOString(),
+            last_error_code: "PUBLISH_OUTCOME_UNKNOWN",
+            last_error_message: "Instagram container status remained unrecognized; reconcile the provider outcome before retrying."
+          }).eq("id", operation.job_id).eq("organization_id", operation.organization_id),
+          "Unable to dead-letter unrecognized Instagram operation");
+          await must(await db.from("social_post_targets").update({
+            status: "failed", last_error_code: "PUBLISH_OUTCOME_UNKNOWN",
+            last_error_message: "Instagram container status remained unrecognized; manual reconciliation is required."
+          }).eq("id", operation.target_id).eq("organization_id", operation.organization_id),
+          "Unable to fail unrecognized Instagram target");
+          await refreshPostStatus(context.post.id, operation.organization_id);
+          await recordJobEvent(job, context.target, "outcome_unknown", {
+            code: "PUBLISH_OUTCOME_UNKNOWN",
+            message: "Instagram returned an unrecognized container status repeatedly.",
+            metadata: { provider_operation_id: operation.id, last_status: statusCode, poll_count: nextPollCount }
+          });
+          return;
+        }
         const delay = computeProviderPollDelay({ pollCount: operation.poll_count });
         await must(await db.from("publish_provider_operations").update({
           next_action_at: new Date(Date.now() + delay).toISOString(),
-          poll_count: operation.poll_count + 1,
+          poll_count: nextPollCount,
           locked_at: null,
           locked_by: null,
           last_error_code: status.outcome === "unknown" ? status.code : null,
@@ -403,6 +431,18 @@ async function pollInstagramProviderOperations() {
         }).eq("id", operation.target_id).eq("organization_id", operation.organization_id),
         "Unable to fail rejected Instagram target");
         await refreshPostStatus(context.post.id, operation.organization_id);
+        await recordJobEvent(job, context.target, "dead_lettered", {
+          code: status.code,
+          message: "Instagram media container processing failed.",
+          metadata: { provider_operation_id: operation.id }
+        });
+        await db.from("audit_events").insert({
+          organization_id: operation.organization_id,
+          action: "social.post.publish_failed",
+          resource_type: "social_post_target",
+          resource_id: operation.target_id,
+          metadata: { provider: "instagram", error_code: status.code, provider_operation_id: operation.id }
+        });
         return;
       }
 
