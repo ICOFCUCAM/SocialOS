@@ -1,6 +1,6 @@
 -- Recover publishing jobs abandoned by a worker crash or forced deployment restart.
--- If the provider ID was already persisted, close the job as succeeded; otherwise
--- dead-letter it for manual reconciliation rather than risk publishing duplicates.
+-- A persisted provider ID proves the provider accepted the post: reconcile the target
+-- to published. Without that ID, dead-letter for manual reconciliation to avoid duplicates.
 create or replace function public.recover_stale_publish_jobs(p_lease_minutes integer default 15)
 returns integer
 language plpgsql
@@ -33,11 +33,16 @@ begin
     returning j.target_id, s.platform_post_id
   ), updated_targets as (
     update public.social_post_targets t
-    set status = 'failed'::public.social_post_target_status,
-        last_error_code = 'PUBLISH_OUTCOME_UNKNOWN',
-        last_error_message = 'Worker stopped before the provider result was recorded. Check the platform before retrying.'
+    set status = case when c.platform_post_id is not null
+                      then 'published'::public.social_post_target_status
+                      else 'failed'::public.social_post_target_status end,
+        published_at = case when c.platform_post_id is not null
+                            then coalesce(t.published_at, now()) else t.published_at end,
+        last_error_code = case when c.platform_post_id is not null then null else 'PUBLISH_OUTCOME_UNKNOWN' end,
+        last_error_message = case when c.platform_post_id is not null then null
+          else 'Worker stopped before the provider result was recorded. Check the platform before retrying.' end
     from changed c
-    where t.id = c.target_id and c.platform_post_id is null
+    where t.id = c.target_id
     returning t.id
   )
   select count(*)::integer into recovered from changed;
