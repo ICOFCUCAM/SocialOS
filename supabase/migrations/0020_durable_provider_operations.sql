@@ -276,7 +276,6 @@ declare
   v_job public.publish_jobs%rowtype;
   v_target public.social_post_targets%rowtype;
   v_now timestamptz := now();
-  v_statuses public.social_post_target_status[];
   v_published integer;
   v_failed integer;
   v_skipped integer;
