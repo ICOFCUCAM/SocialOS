@@ -158,7 +158,7 @@ begin
     where state in ('submit_started','finalize_started')
       and locked_at is not null
       and locked_at < now() - make_interval(secs => greatest(30, least(coalesce(p_lease_seconds,120),600)))
-    returning id, organization_id, job_id, target_id
+    returning id, organization_id, job_id, target_id, provider
   ), jobs as (
     update public.publish_jobs j
     set status = 'dead_letter',
@@ -169,7 +169,7 @@ begin
         last_error_message = 'Provider submission/finalization lost its worker lease. Reconcile externally before retrying.'
     from uncertain u
     where j.id = u.job_id and j.organization_id = u.organization_id
-    returning j.id, j.organization_id, j.target_id, j.attempt_count
+    returning j.id, j.organization_id, j.target_id, j.post_id, j.attempt_count
   ), targets as (
     update public.social_post_targets t
     set status = 'failed',
@@ -177,7 +177,48 @@ begin
         last_error_message = 'Provider outcome is uncertain. Verify the platform before retrying.'
     from jobs j
     where t.id = j.target_id and t.organization_id = j.organization_id
-    returning t.id
+    returning t.id, t.organization_id, t.post_id
+  ), events as (
+    insert into public.publish_job_events(
+      organization_id,job_id,target_id,event_type,attempt_number,error_code,message,metadata
+    )
+    select j.organization_id,j.id,j.target_id,'outcome_unknown',j.attempt_count,
+      'PUBLISH_OUTCOME_UNKNOWN',
+      'Provider side-effect lost its worker lease; manual reconciliation is required.',
+      jsonb_build_object('source','stale_provider_operation_recovery')
+    from jobs j
+    returning id
+  ), audit as (
+    insert into public.audit_events(
+      organization_id,action,resource_type,resource_id,metadata
+    )
+    select j.organization_id,'social.post.outcome_unknown','social_post_target',j.target_id,
+      jsonb_build_object('job_id',j.id,'reason','stale_provider_operation_recovery')
+    from jobs j
+    returning id
+  ), post_updates as (
+    update public.social_posts p
+    set status = case
+      when not exists (
+        select 1 from public.social_post_targets t
+        where t.post_id=p.id and t.organization_id=p.organization_id
+          and t.status not in ('published','failed','skipped','cancelled')
+      ) and exists (
+        select 1 from public.social_post_targets t
+        where t.post_id=p.id and t.organization_id=p.organization_id
+          and t.status='published'
+      ) then 'partially_published'::public.social_post_status
+      when not exists (
+        select 1 from public.social_post_targets t
+        where t.post_id=p.id and t.organization_id=p.organization_id
+          and t.status not in ('published','failed','skipped','cancelled')
+      ) then 'failed'::public.social_post_status
+      else 'processing'::public.social_post_status
+    end,
+    last_error_code = 'PUBLISH_OUTCOME_UNKNOWN'
+    from jobs j
+    where p.id=j.post_id and p.organization_id=j.organization_id
+    returning p.id
   )
   select count(*)::integer into v_recovered from jobs;
 
