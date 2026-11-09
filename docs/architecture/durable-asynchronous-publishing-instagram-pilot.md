@@ -93,3 +93,37 @@ Before adding the migration or enabling this path:
 3. Replay the complete ordered migration chain against a clean disposable PostgreSQL/Supabase-compatible database and run publisher tests before opening this feature for review.
 
 This document records the implementation contract only. It does not claim that asynchronous publishing has been implemented, that migrations have been applied, or that tests pass.
+
+## Repository integration decision (verified against the current publisher branch)
+
+This feature extends the existing publishing pipeline. It must not introduce a second generic queue or replace the current job lifecycle.
+
+Existing responsibilities remain:
+
+- `publish_jobs` is the durable root queue and owns scheduled work, attempts, leases, retries and terminal job status.
+- `publish_job_events` is the durable attempt/operator event history. Provider-operation state is not duplicated into this event log.
+- `publish_organization_fairness` and `claim_publish_jobs` continue to arbitrate fair workspace scheduling and initial job concurrency.
+- `social_post_targets` remains the destination-level publication record; `finish()` and failure handling must be updated through an atomic database operation for the asynchronous path.
+
+The missing durable object is the remote provider operation itself: Meta's media container ID, lifecycle stage, next poll time, poll count, operation lease and final external post ID. The proposed table should therefore be named `publish_provider_operations` to make its relationship to the existing queue explicit.
+
+### Required relational and access invariants
+
+- Each operation is scoped to one organization, one existing publish job, one target and one connected social account/provider.
+- Enforce organization consistency in the database with composite foreign keys where the referenced tables expose matching unique constraints; do not rely only on worker-side filters.
+- The operation must not outlive its owning job or target. Deletion behaviour should follow the existing queue's retention policy and must not silently erase audit history.
+- Browser roles receive no direct insert, update or delete privileges. The publisher service role performs mutations; authenticated operator views, if later required, expose only sanitized fields through a tenant-authorized API/RPC.
+- Add a unique idempotency identity for the logical provider operation. Do not use a partial uniqueness rule that permits a second submit merely because an earlier row became terminal or its lease expired.
+- Keep provider account IDs, remote container IDs and external post IDs as identifiers only. Do not store access tokens, signed media URLs, raw provider responses or authorization-bearing URLs.
+
+### Scheduling and atomicity refinements
+
+The operation poller is a second work selector over `publish_provider_operations`, not a second queue for new posts. It claims only due operations in pollable states. Claiming must use a short database transaction, `FOR UPDATE SKIP LOCKED`, a bounded lease, and a service-only RPC. Provider network calls happen after the claim transaction commits.
+
+A provider status check may be retried after a transient network error because it is a read of the already-created remote container. A container-create request and `media_publish` are side-effecting calls: if their outcomes are ambiguous, the operation becomes `outcome_unknown` and is never replayed automatically.
+
+Finalization must be a single database transaction that verifies the operation state and lease, persists the verified external post ID, marks the target and job successful, recomputes the parent post status, appends the publish event, and releases the lease. A repeated finalization call must be idempotent and must not create duplicate event or audit records.
+
+### Migration gate
+
+The repository branch already contains migrations `0017`–`0019`, but the connected hosted project has only recorded `0001`–`0007`. The hosted project is therefore not a valid place to infer the later table constraints. Before writing the additive migration, inspect the exact base migrations that create `publish_jobs` and `social_post_targets`, verify their unique/composite keys and delete behaviour, and replay the entire ordered migration chain against a disposable database. Do not apply this migration to the hosted project as part of this feature branch.
