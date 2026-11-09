@@ -247,6 +247,8 @@ Start with Phase 0 verification and a YouTube vertical-slice technical design. B
 
 ## 12. Research provenance
 
+Focused YouTube creator tooling assessment: [YouTube Creator Tooling Deep Dive](../research/youtube-creator-tooling-deep-dive.md). This supplement evaluates approval-first channel agents, Shorts production, transcript ingestion, localization/dubbing and official YouTube API constraints. It prioritises an OpenShorts benchmark while keeping all publishing, OAuth, media processing and tenant controls inside SocialOS.
+
 Primary repository inventory and detailed notes: [Full repository inventory and detailed notes](https://github.com/ICOFCUCAM/SocialOS/blob/main/docs/research/social-media-youtube-github-repository-audit.md).
 
 Key direct references:
