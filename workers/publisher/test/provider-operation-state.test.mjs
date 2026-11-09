@@ -13,7 +13,7 @@ const operation = Object.freeze({
   job_id: "job-1",
   target_id: "target-1",
   provider: "instagram",
-  operation_type: "video_publish",
+  operation_type: "instagram_video_publish",
   state: "prepared",
   poll_count: 0,
   created_at: "2026-01-01T00:00:00.000Z"
