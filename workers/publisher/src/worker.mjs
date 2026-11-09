@@ -2,6 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { publishTarget } from "./providers/index.mjs";
+import { submitInstagramVideoContainer, getInstagramContainerStatus, finalizeInstagramVideoContainer } from "./providers/meta.mjs";
+import { classifyInstagramContainerStatus, computeProviderPollDelay } from "./provider-operation-state.mjs";
 import { PublishError } from "./errors.mjs";
 import { computeRetryDelay, classifyPublishFailure } from "./retry-policy.mjs";
 import { resolveTargetContent } from "./content-version.mjs";
@@ -271,6 +273,178 @@ async function fail(job, target, error) {
     metadata: { error_code: ambiguous ? "PUBLISH_OUTCOME_UNKNOWN" : code, retryable, terminal }
   });
 }
+
+async function startInstagramVideoOperation(job, target, context, token, media) {
+  const idempotencyKey = "instagram-video:" + job.id;
+  let operation = await must(await db.from("publish_provider_operations")
+    .select("*").eq("job_id", job.id).eq("operation_type", "instagram_video_publish").maybeSingle(),
+    "Unable to inspect existing Instagram provider operation");
+  if (!operation) {
+    operation = await must(await db.from("publish_provider_operations").insert({
+      organization_id: job.organization_id,
+      job_id: job.id,
+      target_id: target.id,
+      social_account_id: context.account.id,
+      provider: "instagram",
+      operation_type: "instagram_video_publish",
+      state: "prepared",
+      idempotency_key: idempotencyKey
+    }).select("*").single(), "Unable to create durable Instagram provider operation");
+  }
+  if (operation.state !== "prepared") {
+    if (operation.state === "processing" || operation.state === "finalize_started" || operation.state === "published") return;
+    throw new PublishError("Instagram provider operation requires manual reconciliation.", {
+      code: "PUBLISH_OUTCOME_UNKNOWN", ambiguous: true
+    });
+  }
+  const started = await db.from("publish_provider_operations").update({
+    state: "submit_started",
+    locked_at: new Date().toISOString(),
+    locked_by: workerId,
+    submit_started_at: new Date().toISOString()
+  }).eq("id", operation.id).eq("state", "prepared").is("locked_at", null).select("id").maybeSingle();
+  if (started.error) throw new Error("Unable to reserve Instagram container submission: " + started.error.message);
+  if (!started.data) throw new PublishError("Instagram operation is already being submitted by another worker.", {
+    code: "PROVIDER_OPERATION_BUSY", retryable: true, retryAfterMs: 5000
+  });
+
+  let submitted;
+  try {
+    submitted = await submitInstagramVideoContainer({
+      account: { ...context.account, granted_scopes: context.account.granted_scopes || [] },
+      token,
+      post: { ...context.post, body: context.contentVersion.body },
+      media
+    });
+  } catch (error) {
+    await db.from("publish_provider_operations").update({
+      state: "outcome_unknown",
+      locked_at: null,
+      locked_by: null,
+      next_action_at: null,
+      last_error_code: error.code || "INSTAGRAM_SUBMIT_OUTCOME_UNKNOWN",
+      last_error_message: "Container submission could not be confirmed. Verify the provider before retrying."
+    }).eq("id", operation.id).eq("state", "submit_started");
+    throw new PublishError("Instagram container submission outcome is uncertain; manual reconciliation is required.", {
+      code: "PUBLISH_OUTCOME_UNKNOWN", ambiguous: true
+    });
+  }
+
+  await must(await db.from("publish_provider_operations").update({
+    state: "processing",
+    remote_operation_id: submitted.remoteOperationId,
+    submitted_at: new Date().toISOString(),
+    next_action_at: new Date(Date.now() + 3000).toISOString(),
+    poll_count: 0,
+    locked_at: null,
+    locked_by: null
+  }).eq("id", operation.id).eq("state", "submit_started"), "Unable to persist Instagram container ID");
+  await must(await db.from("publish_jobs").update({
+    status: "awaiting_provider",
+    locked_at: null,
+    locked_by: null,
+    completed_at: null,
+    last_error_code: null,
+    last_error_message: null
+  }).eq("id", job.id).eq("organization_id", job.organization_id), "Unable to release job to provider polling");
+  await recordJobEvent(job, target, "claimed", {
+    message: "Instagram video container submitted; durable status polling scheduled.",
+    metadata: { provider_operation_id: operation.id }
+  });
+}
+
+async function pollInstagramProviderOperations() {
+  const { data, error } = await db.rpc("claim_due_publish_provider_operations", {
+    p_worker_id: workerId, p_limit: workerConcurrency, p_lease_seconds: 120
+  });
+  if (error) throw error;
+  await Promise.all((data || []).map(async operation => {
+    try {
+      const job = { id: operation.job_id, organization_id: operation.organization_id, target_id: operation.target_id, attempt_count: 1 };
+      const context = await getTarget(job);
+      const token = await getToken(context.account);
+      const statusCode = await getInstagramContainerStatus({ token, remoteOperationId: operation.remote_operation_id });
+      const status = classifyInstagramContainerStatus(statusCode);
+      if (status.outcome === "pending" || status.outcome === "unknown") {
+        const delay = computeProviderPollDelay({ pollCount: operation.poll_count });
+        await must(await db.from("publish_provider_operations").update({
+          next_action_at: new Date(Date.now() + delay).toISOString(),
+          poll_count: operation.poll_count + 1,
+          locked_at: null,
+          locked_by: null,
+          last_error_code: status.outcome === "unknown" ? status.code : null,
+          last_error_message: status.outcome === "unknown" ? "Provider returned an unrecognized container status; another status check is scheduled." : null
+        }).eq("id", operation.id).eq("state", "processing").eq("locked_by", workerId),
+        "Unable to schedule next Instagram container status check");
+        return;
+      }
+      if (status.outcome === "rejected") {
+        await must(await db.from("publish_provider_operations").update({
+          state: "rejected", next_action_at: null, locked_at: null, locked_by: null,
+          completed_at: new Date().toISOString(), last_error_code: status.code,
+          last_error_message: "Instagram rejected or expired the media container."
+        }).eq("id", operation.id).eq("state", "processing").eq("locked_by", workerId),
+        "Unable to record rejected Instagram container");
+        await must(await db.from("publish_jobs").update({
+          status: "dead_letter", locked_at: null, locked_by: null, completed_at: new Date().toISOString(),
+          last_error_code: status.code, last_error_message: "Instagram media container processing failed."
+        }).eq("id", operation.job_id).eq("organization_id", operation.organization_id),
+        "Unable to dead-letter rejected Instagram job");
+        await must(await db.from("social_post_targets").update({
+          status: "failed", last_error_code: status.code,
+          last_error_message: "Instagram media container processing failed."
+        }).eq("id", operation.target_id).eq("organization_id", operation.organization_id),
+        "Unable to fail rejected Instagram target");
+        await refreshPostStatus(operation.job_id ? context.post.id : context.post.id, operation.organization_id);
+        return;
+      }
+
+      const finalizing = await db.from("publish_provider_operations").update({
+        state: "finalize_started", finalize_started_at: new Date().toISOString()
+      }).eq("id", operation.id).eq("state", "processing").eq("locked_by", workerId).select("id").maybeSingle();
+      if (finalizing.error) throw new Error("Unable to reserve Instagram finalization: " + finalizing.error.message);
+      if (!finalizing.data) return;
+      let publication;
+      try {
+        publication = await finalizeInstagramVideoContainer({
+          account: { ...context.account, granted_scopes: context.account.granted_scopes || [] },
+          token,
+          remoteOperationId: operation.remote_operation_id
+        });
+      } catch (error) {
+        await db.from("publish_provider_operations").update({
+          state: "outcome_unknown", next_action_at: null, locked_at: null, locked_by: null,
+          last_error_code: error.code || "INSTAGRAM_FINALIZE_OUTCOME_UNKNOWN",
+          last_error_message: "Instagram finalization could not be confirmed. Verify the provider before retrying."
+        }).eq("id", operation.id).eq("state", "finalize_started");
+        await db.from("publish_jobs").update({
+          status: "dead_letter", locked_at: null, locked_by: null, completed_at: new Date().toISOString(),
+          last_error_code: "PUBLISH_OUTCOME_UNKNOWN",
+          last_error_message: "Instagram finalization outcome is uncertain; reconcile externally before retrying."
+        }).eq("id", operation.job_id).eq("organization_id", operation.organization_id);
+        return;
+      }
+      await must(await db.rpc("finalize_publish_provider_operation", {
+        p_operation_id: operation.id,
+        p_worker_id: workerId,
+        p_external_post_id: publication.externalPostId,
+        p_permalink: publication.permalink || null
+      }), "Unable to atomically finalize Instagram publication");
+    } catch (error) {
+      const delay = computeProviderPollDelay({ pollCount: operation.poll_count });
+      await db.from("publish_provider_operations").update({
+        next_action_at: new Date(Date.now() + delay).toISOString(),
+        poll_count: operation.poll_count + 1,
+        locked_at: null,
+        locked_by: null,
+        last_error_code: error.code || "INSTAGRAM_STATUS_CHECK_FAILED",
+        last_error_message: safeMessage(error)
+      }).eq("id", operation.id).eq("state", "processing").eq("locked_by", workerId);
+      process.stderr.write(JSON.stringify({ event: "instagram_operation_poll_failed", operationId: operation.id, code: error.code || "POLL_FAILED" }) + "\\n");
+    }
+  }));
+}
+
 async function handleJob(job) {
   let target;
   let context;
@@ -296,6 +470,10 @@ async function handleJob(job) {
     const token = await getToken(context.account);
     const media = await getMedia(context.contentVersion.id, job.organization_id, context.account.platform);
     await waitForProviderCapacity(rateLimitScope);
+    if (context.account.platform === "instagram" && media.length === 1 && media[0].kind === "video") {
+      await startInstagramVideoOperation(job, target, context, token, media);
+      return;
+    }
     const publication = await publishTarget({
       account: { ...context.account, granted_scopes: context.account.granted_scopes || [] },
       token,
@@ -331,6 +509,9 @@ async function handleJob(job) {
   }
 }
 async function poll() {
+  await pollInstagramProviderOperations();
+  const { error: operationRecoveryError } = await db.rpc("recover_stale_publish_provider_operations", { p_lease_seconds: 120 });
+  if (operationRecoveryError) throw operationRecoveryError;
   const { error: recoveryError } = await db.rpc("recover_stale_publish_jobs", { p_lease_minutes: 15 });
   if (recoveryError) throw recoveryError;
   const { data, error } = await db.rpc("claim_publish_jobs", { p_worker_id: workerId, p_limit: workerConcurrency });
