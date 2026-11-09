@@ -83,7 +83,7 @@ export async function GET(_request:NextRequest,{params}:{params:Promise<{campaig
    const version=(versions??[]).find(v=>v.post_id===post.id&&!v.is_default&&v.social_account_id===target.social_account_id)??(versions??[]).find(v=>v.post_id===post.id&&v.is_default);
    if(!version)postFindings.push({code:"CONTENT_VERSION_MISSING",severity:"blocker",title:"Content version missing",detail:"This destination has no account-specific version or shared fallback.",postId:post.id,accountId:target.social_account_id});
    const selectedMedia=version?(mediaByVersion.get(version.id)??[]):[];
-   const mediaRows=selectedMedia.map(m=>assetMap.get(m.asset_id)).filter(Boolean);
+   const mediaRows=selectedMedia.map(m=>assetMap.get(m.asset_id)).filter((media):media is NonNullable<typeof media>=>media!==undefined);
    for(const media of mediaRows){
     if(media.processing_status!=="ready")postFindings.push({code:"MEDIA_NOT_READY",severity:"blocker",title:"Media processing incomplete",detail:"A selected media asset is not ready.",postId:post.id,accountId:target.social_account_id});
     const processing=(media.metadata as Record<string,unknown>|null)?.processing as {kind?:string;derivatives?:{profile?:string;objectKey?:string}[]}|undefined;
