@@ -20,3 +20,8 @@ The service-role key must never be exposed to browser code or committed. See `do
 ## Status
 
 The authentication and first-workspace onboarding foundation is under review in pull request #2. Configure Supabase Auth email templates and redirect URLs before testing signup. This is not yet a production release.
+
+
+## Creator Studio architecture
+
+The Creator Studio architecture, current platform-adapter capability assessment, data model direction, phased implementation plan and release gates are documented in [`docs/creator-studio/ARCHITECTURE.md`](docs/creator-studio/ARCHITECTURE.md). This is an architecture baseline, not a claim that all listed future capabilities are implemented.
