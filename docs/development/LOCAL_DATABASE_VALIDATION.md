@@ -32,7 +32,7 @@ supabase migration list
 
 The reset must be local. It recreates the disposable local database and applies all files under `supabase/migrations` in order. Never add `--linked` or `--remote`.
 
-Expected result: all 17 migration files apply without SQL errors.
+Expected result: every SQL migration file currently present under `supabase/migrations` applies without SQL errors. The workflow reports the discovered file count rather than assuming a fixed number.
 
 ## 3. Run schema and security smoke tests
 
