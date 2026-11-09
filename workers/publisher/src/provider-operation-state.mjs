@@ -56,7 +56,8 @@ export function computeProviderPollDelay({ pollCount = 0, retryAfterMs = null, r
   }
   const attempt = Number.isInteger(pollCount) ? Math.max(0, pollCount) : 0;
   const base = Math.min(MAX_POLL_DELAY_MS, BASE_POLL_DELAY_MS * (2 ** Math.min(attempt, 9)));
-  const sample = Number.isFinite(random()) ? Math.min(1, Math.max(0, random())) : 0.5;
+  const randomValue = random();
+  const sample = Number.isFinite(randomValue) ? Math.min(1, Math.max(0, randomValue)) : 0.5;
   return Math.round(base * (0.8 + sample * 0.4));
 }
 
