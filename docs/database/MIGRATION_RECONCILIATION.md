@@ -185,3 +185,18 @@ Do not use `supabase migration repair` to mark any migration applied or reverted
 **Current status:** filename/timestamp normalization is committed and the branch inventory has been verified through GitHub. Clean replay is still unverified because the Actions runner has not executed a job. Production remains unchanged.
 
 Reference: [Supabase CLI — List local and remote migrations](https://supabase.com/docs/reference/cli/supabase-migration-list).
+
+
+## 11. Tenant-isolation test hardening and Actions runner diagnosis
+
+A code review of the tenant suspension regression test found that the test fixture originally attempted to change the organization status while running as the database owner. The production trigger intentionally rejects critical organization state changes unless the executing role is `service_role`. The fixture now performs the suspension update under `SET LOCAL ROLE service_role`, then switches back to `authenticated` to verify that the suspended tenant's brand access and post creation are denied. This is a test-only change; it does not alter production data or weaken the trigger.
+
+The latest workflow executions for commit `1bd95d0539cc9621ce0f78d85c6789bdb12e0e75` were inspected through the GitHub Actions jobs API:
+- Database validation run: `42724818682`
+- Application CI run: `42724818677`
+- Both jobs have an empty `steps` array, `runner_id = 0`, and no runner name.
+- The jobs failed roughly two seconds after creation, before any workflow step started.
+
+This evidence indicates that the current failures are at runner assignment/provisioning or Actions execution availability, not a reported SQL, TypeScript, lint, or build error. The workflow logs endpoint did not provide a downloadable job log. Therefore no code-level cause for a test failure can be inferred from these runs.
+
+**Next operational action:** restore or verify GitHub Actions runner availability and repository Actions permissions, then rerun the two workflows. Do not try to solve a runner provisioning failure by changing SQL, bypassing tests, or marking migrations applied.
