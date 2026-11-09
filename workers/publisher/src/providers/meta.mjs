@@ -70,3 +70,52 @@ export async function publishInstagram({ account, token, post, media = [] }) {
   if (!result.id) throw new PublishError("Instagram did not return a publication ID.", { code: "PROVIDER_RESPONSE_INVALID", ambiguous: true });
   return { externalPostId: String(result.id), permalink: null };
 }
+
+// Asynchronous Instagram Reels lifecycle. The caller persists the returned
+// container ID before scheduling another worker action.
+export async function submitInstagramVideoContainer({ account, token, post, media }) {
+  requireScopes(account.granted_scopes, ["instagram_basic", "instagram_content_publish"], "Instagram");
+  if (!Array.isArray(media) || media.length !== 1 || media[0]?.kind !== "video" || !media[0]?.signedUrl) {
+    throw new PublishError("Instagram asynchronous publishing requires one prepared video and a fetchable media URL.", { code: "INVALID_PUBLISH_INPUT" });
+  }
+  const params = new URLSearchParams({
+    access_token: token,
+    caption: post.body || "",
+    media_type: "REELS",
+    video_url: media[0].signedUrl
+  });
+  const response = await fetch(graph() + "/" + encodeURIComponent(account.external_account_id) + "/media", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params,
+    signal: AbortSignal.timeout(60000)
+  });
+  const result = await providerJson(response, "Instagram");
+  if (!result.id) throw new PublishError("Instagram did not return a media container ID.", { code: "PROVIDER_RESPONSE_INVALID", ambiguous: true });
+  return { remoteOperationId: String(result.id) };
+}
+
+export async function getInstagramContainerStatus({ token, remoteOperationId }) {
+  if (!remoteOperationId) throw new PublishError("Instagram container ID is missing.", { code: "PROVIDER_OPERATION_ID_MISSING" });
+  const url = new URL(graph() + "/" + encodeURIComponent(remoteOperationId));
+  url.searchParams.set("fields", "status_code");
+  url.searchParams.set("access_token", token);
+  const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  const result = await providerJson(response, "Instagram");
+  return String(result.status_code || "UNKNOWN");
+}
+
+export async function finalizeInstagramVideoContainer({ account, token, remoteOperationId }) {
+  requireScopes(account.granted_scopes, ["instagram_basic", "instagram_content_publish"], "Instagram");
+  if (!remoteOperationId) throw new PublishError("Instagram container ID is missing.", { code: "PROVIDER_OPERATION_ID_MISSING" });
+  const params = new URLSearchParams({ creation_id: remoteOperationId, access_token: token });
+  const response = await fetch(graph() + "/" + encodeURIComponent(account.external_account_id) + "/media_publish", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params,
+    signal: AbortSignal.timeout(60000)
+  });
+  const result = await providerJson(response, "Instagram");
+  if (!result.id) throw new PublishError("Instagram did not return a publication ID.", { code: "PROVIDER_RESPONSE_INVALID", ambiguous: true });
+  return { externalPostId: String(result.id), permalink: null };
+}
