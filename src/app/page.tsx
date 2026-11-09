@@ -10,9 +10,11 @@ const capabilities = [
 ];
 
 function Mark({ inverse = false }: { inverse?: boolean }) {
-  return <span aria-hidden="true" className={`relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[13px] ${inverse ? "bg-white text-[#145c43]" : "bg-[#155b44] text-white"}`}>
-    <span className="absolute h-[22px] w-[22px] rotate-45 rounded-[6px] border-[2.5px] border-current opacity-90" />
-    <span className="absolute h-[10px] w-[10px] rounded-full bg-current" />
+  return <span aria-hidden="true" className={`relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[13px] ${inverse ? "bg-white text-[#155b44]" : "bg-[#155b44] text-white"} shadow-[0_5px_14px_-8px_rgba(21,91,68,.65)]`}>
+    <svg viewBox="0 0 40 40" className="h-8 w-8" fill="none">
+      <path d="M29.4 11.8C26.9 8.8 22.8 7.2 18.4 7.6C13.1 8 9.4 11 9.4 15.1C9.4 19.6 14.1 20.8 20.1 21.7C26.1 22.6 30.1 24.2 30.1 28.5C30.1 33 25.6 36 19.6 36C15.1 36 11.1 34.2 8.7 31.1" stroke="currentColor" strokeWidth="3.1" strokeLinecap="round"/>
+      <circle cx="29.5" cy="10.2" r="3" fill="#D8C18A"/>
+    </svg>
   </span>;
 }
 
