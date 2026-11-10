@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import { CalendarClock, CheckCircle2, FileImage, Loader2, Send, UploadCloud } from "lucide-react";
 
 type Brand={id:string;name:string};
-type Account={id:string;brand_id:string;account_name:string;connection_status:string;platform:{code:string;name:string}|null};
+type Capability={publishingEnabled:boolean;supportedMedia:("image"|"video")[];maxMediaItems:number;textOnly:boolean;limitation:string|null};
+type Account={id:string;brand_id:string;account_name:string;connection_status:string;platform:{code:string;name:string}|null;capability:Capability};
 type Asset={id:string;brand_id:string;original_filename:string|null;mime_type:string;file_size_bytes:number;processing_status:string};
 type Props={organizationId:string;brands:Brand[];accounts:Account[];assets:Asset[];initialBrandId?:string};
 
@@ -49,6 +50,17 @@ export function SocialPostComposer({organizationId,brands,accounts,assets:initia
   const availableAssets=useMemo(()=>assets.filter(a=>a.brand_id===brandId),[assets,brandId]);
   const readyAssets=availableAssets.filter(a=>a.processing_status==="ready");
   const pendingAssets=availableAssets.filter(a=>a.processing_status!=="ready");
+  const selectedMedia=readyAssets.filter(asset=>selectedAssets.includes(asset.id));
+  function mediaIssue(account:Account){
+    const capability=account.capability;
+    if(!capability.publishingEnabled)return capability.limitation||"Publishing is not enabled.";
+    if(selectedMedia.length>capability.maxMediaItems)return "This destination supports at most "+capability.maxMediaItems+" media item(s).";
+    if(selectedMedia.some(asset=>!capability.supportedMedia.includes(asset.mime_type.startsWith("video/")?"video":"image")))
+      return "One or more selected media formats are not supported by this destination.";
+    if(capability.textOnly&&selectedMedia.length)return "Remove media to publish a text-only LinkedIn post.";
+    return null;
+  }
+  const unsupportedSelected=availableAccounts.filter(account=>selectedAccounts.includes(account.id)&&mediaIssue(account));
   function changeBrand(id:string){setBrandId(id);setSelectedAccounts([]);setSelectedAssets([]);}
 
   async function uploadFiles(files:FileList|null){
@@ -88,6 +100,7 @@ export function SocialPostComposer({organizationId,brands,accounts,assets:initia
     setError("");setMessage("");
     if(!brandId) return setError("Select a brand.");
     if(!selectedAccounts.length)return setError("Select at least one connected destination account.");
+    if(unsupportedSelected.length)return setError("Resolve unsupported destinations: "+unsupportedSelected.map(account=>account.platform?.name||account.account_name).join(", ")+".");
     if(scheduleMode==="schedule"&&(!scheduledAt||new Date(scheduledAt).getTime()<=Date.now()))return setError("Choose a future publishing date and time.");
     const unavailable=selectedAssets.filter(id=>!readyAssets.some(asset=>asset.id===id));
     if(unavailable.length)return setError("One or more selected assets are not ready. Refresh media status or remove them.");
@@ -128,7 +141,7 @@ export function SocialPostComposer({organizationId,brands,accounts,assets:initia
     <aside className="space-y-5">
       <section className="rounded-2xl border border-[#e6ece6] bg-white p-5">
         <h3 className="text-sm font-semibold">Publishing destinations</h3><p className="mt-1 text-xs leading-5 text-[#89958d]">Select connected accounts for this brand.</p>
-        <div className="mt-4 space-y-2">{availableAccounts.length?availableAccounts.map(account=><label key={account.id} className="flex items-center gap-3 rounded-xl border border-[#edf1ed] p-3"><input type="checkbox" checked={selectedAccounts.includes(account.id)} onChange={e=>setSelectedAccounts(current=>e.target.checked?[...current,account.id]:current.filter(id=>id!==account.id))} className="h-4 w-4 accent-[#176b4b]"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{account.account_name}</span><span className="mt-0.5 block text-[10px] text-[#89958d]">{account.platform?.name||"Social channel"}</span></span><CheckCircle2 size={14} className="text-[#176b4b]"/></label>):<div className="rounded-xl border border-dashed border-[#dfe7df] p-4 text-xs leading-5 text-[#89958d]">No connected accounts for this brand. Connect a supported account before creating a post.</div>}</div>
+        <div className="mt-4 space-y-2">{availableAccounts.length?availableAccounts.map(account=>{const issue=mediaIssue(account);return <label key={account.id} className={`flex items-start gap-3 rounded-xl border p-3 ${issue?"border-[#eee5d6] bg-[#fcfaf5]":"border-[#edf1ed]"}`}><input type="checkbox" checked={selectedAccounts.includes(account.id)} disabled={!account.capability.publishingEnabled} onChange={e=>setSelectedAccounts(current=>e.target.checked?[...current,account.id]:current.filter(id=>id!==account.id))} className="mt-0.5 h-4 w-4 accent-[#176b4b]"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{account.account_name}</span><span className="mt-0.5 block text-[10px] text-[#89958d]">{account.platform?.name||"Social channel"} · {account.capability.publishingEnabled?"Publishing supported":"Publishing unavailable"}</span>{issue&&<span className="mt-1 block text-[10px] leading-4 text-[#8a6a28]">{issue}</span>}</span>{account.capability.publishingEnabled?<CheckCircle2 size={14} className="text-[#176b4b]"/>:<span className="text-[10px] text-[#8a6a28]">Unavailable</span>}</label> }):<div className="rounded-xl border border-dashed border-[#dfe7df] p-4 text-xs leading-5 text-[#89958d]">No connected accounts for this brand. Connect a supported account before creating a post.</div>}</div>
       </section>
       <section className="rounded-2xl border border-[#e6ece6] bg-white p-5">
         <h3 className="text-sm font-semibold">When should it publish?</h3>
