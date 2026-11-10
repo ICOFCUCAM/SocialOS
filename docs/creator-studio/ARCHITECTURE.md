@@ -166,3 +166,46 @@ The CI runner assignment issue must be resolved before these gates can be treate
 Implement **Creator Studio 1: durable draft persistence and per-target content** only after local database replay is available. First, extend the existing post-bundle RPC to accept a validated array of target objects (account ID, caption override and allowlisted platform options) and create all post, media, target and job rows in one transaction. Then add revision/AI-generation records through CLI-generated migrations, RLS policies and tests.
 
 Do not implement approval states or new tables in an unvalidated production database. Keep the existing composer and AI Studio as the user-facing starting point; evolve them rather than replacing them.
+
+
+## 9. Capability-aware composer foundation — implementation update (2026-11-10)
+
+The first capability-aware composer increment is now committed on the integration branch.
+
+### Added
+
+- `src/lib/social/capabilities.ts`: conservative server-owned registry for current adapter support.
+- Composer page passes capability metadata to the existing composer.
+- Connected but unsupported platforms remain visible as unavailable; their destination checkbox is disabled.
+- Composer checks selected media type and media count against each selected destination before saving/scheduling.
+- `POST /api/social/posts` repeats the platform, account, brand, connection-state, media-readiness and media-compatibility checks server-side before calling the existing transactional post-bundle RPC.
+
+### Current capability matrix
+
+| Platform | Publish | Media | Current limitation |
+|---|---|---|---|
+| Facebook Pages | Enabled | One image or video | Multi-photo not enabled |
+| Instagram | Enabled | One image or video/Reel | Multi-item posts not enabled |
+| YouTube | Enabled | One video | Video required |
+| LinkedIn | Enabled | Text only | Media upload not implemented |
+| TikTok | Disabled | None | No adapter |
+| Threads | Disabled | None | No adapter |
+| Pinterest | Disabled | None | No adapter |
+| X | Disabled | None | No adapter |
+
+This matrix describes the code currently in this repository, not a guarantee of provider approval or live account eligibility. OAuth scopes, provider policy, media processing and worker checks remain authoritative.
+
+### Explicitly not yet implemented
+
+- Per-target caption overrides and structured platform options in the post creation RPC.
+- Durable revision history and AI generation history.
+- Autosave of unsaved composer state to the server.
+- Approval workflows and approval-gated scheduling.
+- Provider-specific character limits, aspect ratios, video duration and file-size validation.
+- Provider API live contract tests and end-to-end publication tests.
+
+### Acceptance and safety
+
+The API rejects unsupported platforms and incompatible media even if a caller bypasses the browser UI. The existing transactional RPC remains the sole creator of posts, targets, media associations and jobs. No direct browser-to-provider publishing was introduced.
+
+This increment is code-reviewed but not CI-verified because the GitHub Actions jobs are still failing before useful test-step output is available. Do not deploy to production until migration replay, tenant isolation, build/typecheck and provider contract gates pass.
