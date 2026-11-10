@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SocialPostComposer } from "@/components/app/social-post-composer";
+import { getPlatformCapability } from "@/lib/social/capabilities";
 
 export default async function ComposePage({searchParams}:{searchParams:Promise<{brand?:string}>}) {
   const {brand:requestedBrand}=await searchParams;
@@ -22,6 +23,6 @@ export default async function ComposePage({searchParams}:{searchParams:Promise<{
   const validBrand=(brands??[]).some(b=>b.id===requestedBrand)?requestedBrand:brands?.[0]?.id;
   return <div className="space-y-7">
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold tracking-[.16em] text-[#176b4b]">CONTENT WORKFLOW</p><h1 className="mt-3 text-3xl font-semibold tracking-tight">Post composer</h1><p className="mt-2 text-sm text-[#77847b]">Create content, select destinations and save or schedule it.</p></div><Link href="/app/calendar" className="text-xs font-semibold text-[#176b4b]">View content calendar →</Link></div>
-    {brands?.length?<SocialPostComposer organizationId={member.organization_id} brands={brands} accounts={(accounts??[]).map(a=>({...a,platform:a.platform as unknown as {code:string;name:string}|null}))} assets={assets??[]} initialBrandId={validBrand}/>:<section className="rounded-2xl border border-dashed border-[#d9e4da] bg-white px-6 py-14 text-center"><h2 className="text-sm font-semibold">Create a brand first</h2><p className="mt-2 text-xs text-[#89958d]">Every post belongs to a brand. Add an active brand before creating content.</p><Link href="/app/brands/new" className="mt-5 inline-flex rounded-xl bg-[#176b4b] px-4 py-2.5 text-xs font-semibold text-white">Add a brand</Link></section>}
+    {brands?.length?<SocialPostComposer organizationId={member.organization_id} brands={brands} accounts={(accounts??[]).map(a=>({...a,platform:a.platform as unknown as {code:string;name:string}|null,capability:getPlatformCapability((a.platform as unknown as {code:string}|null)?.code)}))} assets={assets??[]} initialBrandId={validBrand}/>:<section className="rounded-2xl border border-dashed border-[#d9e4da] bg-white px-6 py-14 text-center"><h2 className="text-sm font-semibold">Create a brand first</h2><p className="mt-2 text-xs text-[#89958d]">Every post belongs to a brand. Add an active brand before creating content.</p><Link href="/app/brands/new" className="mt-5 inline-flex rounded-xl bg-[#176b4b] px-4 py-2.5 text-xs font-semibold text-white">Add a brand</Link></section>}
   </div>;
 }
