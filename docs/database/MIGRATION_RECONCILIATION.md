@@ -200,3 +200,38 @@ The latest workflow executions for commit `1bd95d0539cc9621ce0f78d85c6789bdb12e0
 This evidence indicates that the current failures are at runner assignment/provisioning or Actions execution availability, not a reported SQL, TypeScript, lint, or build error. The workflow logs endpoint did not provide a downloadable job log. Therefore no code-level cause for a test failure can be inferred from these runs.
 
 **Next operational action:** restore or verify GitHub Actions runner availability and repository Actions permissions, then rerun the two workflows. Do not try to solve a runner provisioning failure by changing SQL, bypassing tests, or marking migrations applied.
+
+
+## 12. Publishing and tenant authorization hardening (2026-11-10)
+
+### Provider publication ambiguity
+
+Added `providerFetch` in `workers/publisher/src/errors.mjs`. Network errors from a final publication request are now classified as `PUBLISH_OUTCOME_UNKNOWN` and marked ambiguous. The publisher worker therefore dead-letters the job for reconciliation rather than automatically retrying a request that the platform may already have accepted.
+
+Applied to:
+- LinkedIn post creation.
+- Facebook feed/photo/video publishing.
+- Instagram `media_publish`.
+
+Non-publication requests remain retryable where appropriate. YouTube's final resumable upload already had an explicit ambiguous-outcome handler. Added unit tests for both ambiguous publication failures and retryable non-publishing transport failures.
+
+### Multi-workspace authorization
+
+Corrected two API routes that selected an arbitrary active organization membership with `limit(1)`:
+- `src/app/api/social/accounts/[accountId]/route.ts`: resolves the account through the caller's RLS-visible row first, then checks the caller's manager role in that exact organization before disconnecting.
+- `src/app/api/social/publishing/jobs/[jobId]/retry/route.ts`: resolves the job through tenant RLS first, then checks the caller's retry role in that exact organization.
+
+This prevents valid users who belong to multiple workspaces from being authorized against the wrong tenant or being denied based on an unrelated membership.
+
+### CI status
+
+The newest workflow executions for commit `2fbc3580693d27c6bb57c24707759db8f0832f76` were created, but both jobs again completed with empty step summaries. Earlier job records consistently showed no runner assignment (`runner_id=0`). No test output or application build output is available. This remains an Actions execution/provisioning blocker; code correctness has not been established by CI.
+
+### Remaining limitations before launch
+
+- LinkedIn publishing adapter is text-only; media upload is explicitly rejected rather than silently discarded.
+- Instagram adapter currently accepts one media item per target.
+- Facebook adapter currently accepts one media item per target.
+- YouTube adapter currently accepts one prepared video per target.
+- Analytics collector supports YouTube, Meta and LinkedIn paths but still requires provider-scope and live-account validation.
+- No Creator Studio production launch should proceed until CI replay, tenant tests, provider sandbox tests and schema reconciliation are green.
