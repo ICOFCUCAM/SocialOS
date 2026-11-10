@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getPlatformCapability } from "@/lib/social/capabilities";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -47,6 +48,42 @@ export async function POST(request: NextRequest) {
   }
   if (timezone.length > 80) {
     return NextResponse.json({ error: "Timezone value is invalid." }, { status: 400 });
+  }
+
+  // Revalidate adapter and media compatibility on the server; client-side checks
+  // are UX only and must never be the security or correctness boundary.
+  const { data: destinations, error: destinationError } = await supabase.from("social_accounts")
+    .select("id,brand_id,connection_status,platform:social_platforms(code)")
+    .eq("organization_id", organizationId)
+    .eq("brand_id", brandId)
+    .in("id", targetAccountIds as string[]);
+  if (destinationError || !destinations || destinations.length !== targetAccountIds.length) {
+    return NextResponse.json({ error: "One or more destination accounts are unavailable for this brand." }, { status: 400 });
+  }
+  if (destinations.some(account => account.connection_status !== "connected")) {
+    return NextResponse.json({ error: "Reconnect every destination account before creating this post." }, { status: 409 });
+  }
+  const { data: mediaRows, error: mediaError } = assetIds.length
+    ? await supabase.from("social_media_assets").select("id,brand_id,mime_type,processing_status")
+        .eq("organization_id", organizationId).eq("brand_id", brandId).in("id", assetIds as string[])
+    : { data: [], error: null };
+  if (mediaError || !mediaRows || mediaRows.length !== assetIds.length) {
+    return NextResponse.json({ error: "One or more media assets are unavailable for this brand." }, { status: 400 });
+  }
+  if (mediaRows.some(asset => asset.processing_status !== "ready")) {
+    return NextResponse.json({ error: "All selected media must finish scanning and processing before scheduling." }, { status: 409 });
+  }
+  const mediaKinds = mediaRows.map(asset => asset.mime_type.startsWith("video/") ? "video" : "image");
+  for (const account of destinations) {
+    const platform = account.platform as unknown as { code: string } | null;
+    const capability = getPlatformCapability(platform?.code);
+    if (!capability.publishingEnabled) {
+      return NextResponse.json({ error: capability.limitation || "Publishing is not enabled for one of the selected platforms." }, { status: 422 });
+    }
+    if (mediaKinds.length > capability.maxMediaItems ||
+        mediaKinds.some(kind => !capability.supportedMedia.includes(kind as "image" | "video"))) {
+      return NextResponse.json({ error: "Selected media is not supported by every destination. Review platform requirements before scheduling." }, { status: 422 });
+    }
   }
 
   const { data: postId, error } = await supabase.rpc("create_social_post_bundle", {
