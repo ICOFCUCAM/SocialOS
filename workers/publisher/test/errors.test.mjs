@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { providerJson, requireScopes, PublishError } from "../src/errors.mjs";
+import { providerFetch, providerJson, requireScopes, PublishError } from "../src/errors.mjs";
 
 test("provider 429 is retryable and preserves Retry-After", async () => {
   await assert.rejects(
@@ -39,4 +39,31 @@ test("provider 403 is classified as a permission problem", async () => {
     providerJson(new Response("{}", { status: 403 }), "Test"),
     error => error.code === "PROVIDER_PERMISSION_DENIED" && !error.retryable
   );
+});
+
+
+test("network failure during final publish request is ambiguous and must not auto-retry", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("socket reset"); };
+  try {
+    await assert.rejects(
+      providerFetch("https://provider.example/publish", { method: "POST" }, "Test", { ambiguous: true }),
+      error => error instanceof PublishError && error.code === "PUBLISH_OUTCOME_UNKNOWN" && error.ambiguous && !error.retryable
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("network failure during a non-publishing provider request is retryable", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("socket reset"); };
+  try {
+    await assert.rejects(
+      providerFetch("https://provider.example/token", { method: "POST" }, "Test"),
+      error => error instanceof PublishError && error.code === "PROVIDER_REQUEST_FAILED" && error.retryable && !error.ambiguous
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
