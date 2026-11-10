@@ -1,4 +1,4 @@
-import { providerJson, PublishError, requireScopes } from "../errors.mjs";
+import { providerFetch, providerJson, PublishError, requireScopes } from "../errors.mjs";
 
 const graph = () => {
   const version = process.env.META_GRAPH_API_VERSION;
@@ -22,7 +22,7 @@ export async function publishFacebookPage({ account, token, post, media = [] }) 
     if (first.kind === "video") params.set("file_url", first.signedUrl);
   }
   if (media.length > 1) throw new PublishError("Facebook multi-photo publishing is not enabled in this adapter yet.", { code: "UNSUPPORTED_MEDIA_SET" });
-  const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params, signal: AbortSignal.timeout(120000) });
+  const response = await providerFetch(endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params, signal: AbortSignal.timeout(120000) }, "Facebook", { ambiguous: true });
   const result = await providerJson(response, "Facebook");
   if (!result.id) throw new PublishError("Facebook did not return a publication ID.", { code: "PROVIDER_RESPONSE_INVALID", ambiguous: true });
   return { externalPostId: String(result.id), permalink: null };
@@ -63,7 +63,7 @@ export async function publishInstagram({ account, token, post, media = [] }) {
     if (!ready) throw new PublishError("Instagram media container is still processing; publication was not attempted.", { code: "MEDIA_CONTAINER_PENDING", retryable: true });
   }
   const publishParams = new URLSearchParams({ creation_id: container.id, access_token: token });
-  const publish = await fetch(base + "/" + encodeURIComponent(account.external_account_id) + "/media_publish", {
+  const publish = await providerFetch(base + "/" + encodeURIComponent(account.external_account_id) + "/media_publish", {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: publishParams, signal: AbortSignal.timeout(60000)
   });
   const result = await providerJson(publish, "Instagram");
