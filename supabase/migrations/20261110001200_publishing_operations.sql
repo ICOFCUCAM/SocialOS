@@ -33,7 +33,7 @@ create policy publish_job_events_select_tenant on public.publish_job_events
       join public.social_posts p on p.id=t.post_id and p.organization_id=t.organization_id
       where t.id=publish_job_events.target_id
         and t.organization_id=publish_job_events.organization_id
-        and public.can_access_brand(p.brand_id,p.organization_id)
+        and private.can_access_brand(p.brand_id,p.organization_id)
     )
   );
 
@@ -56,7 +56,7 @@ security definer
 set search_path=public,auth,pg_temp
 as $$
 begin
-  if auth.uid() is null or not public.is_org_member(p_organization_id) then
+  if auth.uid() is null or not private.is_org_member(p_organization_id) then
     raise exception 'Workspace membership required' using errcode='42501';
   end if;
   return query
@@ -71,7 +71,7 @@ begin
   from public.publish_jobs j
   join public.social_posts p on p.id=j.post_id and p.organization_id=j.organization_id
   where j.organization_id=p_organization_id
-    and public.can_access_brand(p.brand_id,p.organization_id);
+    and private.can_access_brand(p.brand_id,p.organization_id);
 end;
 $$;
 revoke all on function public.get_publishing_operations_summary(uuid) from public,anon;
@@ -94,8 +94,8 @@ begin
   select * into v_post from public.social_posts
     where id=v_job.post_id and organization_id=v_job.organization_id;
   if auth.uid() is null
-    or not public.has_org_role(v_job.organization_id,array['owner','administrator','manager','publisher'])
-    or not public.can_access_brand(v_post.brand_id,v_post.organization_id) then
+    or not private.has_org_role(v_job.organization_id,array['owner','administrator','manager','publisher'])
+    or not private.can_access_brand(v_post.brand_id,v_post.organization_id) then
     raise exception 'Publishing operator permission required' using errcode='42501';
   end if;
   if v_job.status not in ('dead_letter','retry') then
@@ -149,8 +149,8 @@ begin
   select * into v_post from public.social_posts
     where id=v_job.post_id and organization_id=v_job.organization_id;
   if auth.uid() is null
-    or not public.has_org_role(v_job.organization_id,array['owner','administrator','manager','publisher'])
-    or not public.can_access_brand(v_post.brand_id,v_post.organization_id) then
+    or not private.has_org_role(v_job.organization_id,array['owner','administrator','manager','publisher'])
+    or not private.can_access_brand(v_post.brand_id,v_post.organization_id) then
     raise exception 'Publishing operator permission required' using errcode='42501';
   end if;
   if v_job.status<>'dead_letter' or v_job.last_error_code<>'PUBLISH_OUTCOME_UNKNOWN' then

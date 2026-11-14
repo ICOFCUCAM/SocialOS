@@ -105,6 +105,39 @@ begin
   end if;
 end $$;
 
+-- Both post-creation RPCs must reject a suspended tenant because it is
+-- suspended, not merely because of the caller's role. Give the Tenant B user a
+-- publishing role so only the active-tenant guard can reject the request.
+reset role;
+update public.organization_members set role='publisher'
+where organization_id='b0000000-0000-4000-8000-000000000002'
+  and user_id='20000000-0000-4000-8000-000000000002';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-4000-8000-000000000002',true);
+do $$
+declare
+  rpc text;
+  message text;
+begin
+  foreach rpc in array array['create_social_post_bundle','create_social_post_bundle_with_versions'] loop
+    message := null;
+    begin
+      execute format('select public.%I($1)', rpc) using jsonb_build_object(
+        'organization_id','b0000000-0000-4000-8000-000000000002',
+        'brand_id','bb000000-0000-4000-8000-000000000002',
+        'body','This must never be created while tenant is suspended',
+        'target_account_ids',jsonb_build_array(),
+        'account_versions',jsonb_build_array()
+      );
+    exception when others then
+      message := sqlerrm;
+    end;
+    if message is distinct from 'Active workspace required' then
+      raise exception '% did not reject the suspended tenant with the active-workspace guard (got: %)', rpc, coalesce(message, 'no error');
+    end if;
+  end loop;
+end $$;
+
 -- A workspace viewer cannot use the post-creation RPC even in an active tenant.
 select set_config('request.jwt.claim.sub','30000000-0000-4000-8000-000000000003',true);
 do $$
