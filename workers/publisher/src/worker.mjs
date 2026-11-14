@@ -508,7 +508,30 @@ async function pollInstagramProviderOperations() {
   }));
 }
 
+// Keep the job lease alive while a slow provider call (e.g. a large YouTube
+// upload) runs, so stale-job recovery does not mark a live publish as unknown.
+function startJobHeartbeat(job) {
+  const timer = setInterval(() => {
+    db.from("publish_jobs").update({ locked_at: new Date().toISOString() })
+      .eq("id", job.id).eq("locked_by", workerId).eq("status", "running")
+      .then(({ error }) => {
+        if (error) process.stderr.write(JSON.stringify({ event: "publish_lease_renew_failed", jobId: job.id, code: error.code || "LEASE_RENEW_FAILED" }) + "\n");
+      });
+  }, 60_000);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
 async function handleJob(job) {
+  const stopHeartbeat = startJobHeartbeat(job);
+  try {
+    await handleJobLeased(job);
+  } finally {
+    stopHeartbeat();
+  }
+}
+
+async function handleJobLeased(job) {
   let target;
   let context;
   let rateLimitScope;

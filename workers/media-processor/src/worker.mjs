@@ -39,7 +39,8 @@ function command(bin, args, timeout = 90000) {
     child.on("error", e => { clearTimeout(timer); reject(e); });
     child.on("close", code => {
       clearTimeout(timer);
-      code === 0 ? resolve(out) : reject(new Error(bin + " failed (" + code + "): " + err));
+      if (code === 0) resolve(out);
+      else reject(new Error(bin + " failed (" + code + "): " + err));
     });
   });
 }
@@ -48,6 +49,35 @@ async function update(table, id, values) {
   const { error } = await db.from(table).update(values).eq("id", id);
   if (error) throw error;
 }
+const HEARTBEAT_MS = 60_000;
+const leaseLostError = () => Object.assign(new Error("Media job lease was lost to stale-job recovery"), { code: "LEASE_LOST" });
+
+// Renew this worker's lease. Returns false once recovery or another worker has
+// taken the job, so no stale result is written over the new owner's work.
+async function renewLease(job) {
+  const { data, error } = await db.from("media_processing_jobs")
+    .update({ locked_at: new Date().toISOString() })
+    .eq("id", job.id).eq("locked_by", workerId).eq("status", "running")
+    .select("id").maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+function startHeartbeat(job) {
+  const lease = { lost: false };
+  const timer = setInterval(() => {
+    renewLease(job).then(held => { if (!held) lease.lost = true; })
+      .catch(e => process.stderr.write(JSON.stringify({ event: "lease_renew_failed", jobId: job.id, error: String(e.message || e) }) + "\n"));
+  }, HEARTBEAT_MS);
+  timer.unref?.();
+  return { lease, stop: () => clearInterval(timer) };
+}
+async function updateOwnedJob(job, values) {
+  const { data, error } = await db.from("media_processing_jobs").update(values)
+    .eq("id", job.id).eq("locked_by", workerId).eq("status", "running").select("id").maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
 async function put(objectKey, file, contentType) {
   const body = await readFile(file);
   const { error } = await db.storage.from(bucket).upload(objectKey, body, { contentType, upsert: true });
@@ -55,7 +85,7 @@ async function put(objectKey, file, contentType) {
   return { objectKey, contentType, bytes: body.length };
 }
 
-async function processAsset(job) {
+async function processAsset(job, lease) {
   const { data: asset, error } = await db.from("social_media_assets").select("*")
     .eq("id", job.asset_id).eq("organization_id", job.organization_id).single();
   if (error || !asset) throw Object.assign(new Error("Asset record not found"), { code: "ASSET_NOT_FOUND" });
@@ -111,6 +141,7 @@ async function processAsset(job) {
 
       const derivatives = [posterDerivative];
       for (const profileName of profiles.video) {
+        if (lease.lost) throw leaseLostError();
         const profile = VIDEO_PROFILES[profileName];
         const output = path.join(dir, "video-" + profileName + ".mp4");
         const filter = "scale=" + profile.width + ":" + profile.height + ":force_original_aspect_ratio=decrease,pad=" +
@@ -136,35 +167,45 @@ async function processAsset(job) {
         durationMs: Math.round(duration * 1000), targetPlatforms: profiles.platforms, derivatives
       };
     }
-    await update("social_media_assets", asset.id, {
+    return {
       processing_status: "ready", width: result.width, height: result.height,
       duration_ms: result.durationMs || null,
       checksum_sha256: createHash("sha256").update(bytes).digest("hex"),
       metadata: { ...(asset.metadata || {}), detectedMimeType: detected, processing: result, processedAt: new Date().toISOString() }
-    });
+    };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 }
 
 async function handle(job) {
+  const { lease, stop } = startHeartbeat(job);
   try {
     await update("social_media_assets", job.asset_id, { processing_status: "processing" });
-    await processAsset(job);
-    await update("media_processing_jobs", job.id, {
+    const readyValues = await processAsset(job, lease);
+    // Confirm ownership immediately before publishing the result.
+    if (lease.lost || !(await renewLease(job))) throw leaseLostError();
+    await update("social_media_assets", job.asset_id, readyValues);
+    await updateOwnedJob(job, {
       status: "succeeded", locked_at: null, locked_by: null,
       completed_at: new Date().toISOString(), last_error_code: null, last_error_message: null
     });
   } catch (e) {
+    if (e.code === "LEASE_LOST") {
+      process.stderr.write(JSON.stringify({ event: "job_lease_lost", jobId: job.id }) + "\n");
+      return;
+    }
     const terminal = Boolean(e.quarantine) || job.attempt_count >= job.max_attempts;
-    await update("media_processing_jobs", job.id, {
+    const owned = await updateOwnedJob(job, {
       status: terminal ? (e.quarantine ? "failed" : "dead_letter") : "retry",
       available_at: new Date(Date.now() + Math.min(60, 2 ** job.attempt_count) * 60000).toISOString(),
       locked_at: null, locked_by: null, completed_at: terminal ? new Date().toISOString() : null,
       last_error_code: e.code || "PROCESSING_ERROR", last_error_message: String(e.message || e).slice(0, 1500)
     });
-    if (terminal) await update("social_media_assets", job.asset_id, { processing_status: e.quarantine ? "quarantined" : "failed" });
+    if (owned && terminal) await update("social_media_assets", job.asset_id, { processing_status: e.quarantine ? "quarantined" : "failed" });
     process.stderr.write(JSON.stringify({ event: "job_failed", jobId: job.id, error: String(e.message || e) }) + "\n");
+  } finally {
+    stop();
   }
 }
 
