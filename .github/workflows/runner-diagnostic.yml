@@ -1,0 +1,27 @@
+name: SocialOS runner diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: socialos-runner-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runner-smoke:
+    name: Verify GitHub-hosted runner allocation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm runner started
+        run: |
+          echo "GitHub Actions runner started successfully."
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner architecture: $RUNNER_ARCH"
+          uname -a
+          date -u

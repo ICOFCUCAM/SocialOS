@@ -1,0 +1,12 @@
+# Local secrets and generated files
+.env
+.env.*
+!.env.example
+supabase/.branches
+supabase/.temp
+supabase/.profiles
+node_modules/
+.next/
+dist/
+coverage/
+.DS_Store

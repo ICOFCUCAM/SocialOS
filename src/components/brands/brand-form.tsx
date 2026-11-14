@@ -1,0 +1,14 @@
+import Link from "next/link";
+import { createBrand, updateBrand } from "@/lib/actions/brands";
+
+type BrandValues = { id?: string; name?: string | null; slug?: string | null; description?: string | null; website_url?: string | null };
+export function BrandForm({brand}:{brand?:BrandValues}) {
+  const action = brand?.id ? updateBrand.bind(null, brand.id) : createBrand;
+  return <form action={action} className="space-y-5">
+    <div><label htmlFor="brand-name" className="block text-sm font-semibold">Brand name</label><input id="brand-name" name="name" required minLength={2} maxLength={120} defaultValue={brand?.name??""} placeholder="e.g. Northstar Studio" className="mt-2 w-full rounded-xl border border-[#dfe7e0] bg-white px-4 py-3 text-sm outline-none focus:border-[#176b4b]"/></div>
+    <div><label htmlFor="brand-slug" className="block text-sm font-semibold">Brand address</label><div className="mt-2 flex items-center rounded-xl border border-[#dfe7e0] bg-white px-4 focus-within:border-[#176b4b]"><span className="text-sm text-[#89958d]">socialos.app/</span><input id="brand-slug" name="slug" defaultValue={brand?.slug??""} placeholder="brand-name" pattern="[a-zA-Z0-9][a-zA-Z0-9-]{1,62}" className="min-w-0 flex-1 py-3 text-sm outline-none"/></div><p className="mt-2 text-xs text-[#89958d]">Lowercase letters, numbers and hyphens. Must be unique in your workspace.</p></div>
+    <div><label htmlFor="brand-website" className="block text-sm font-semibold">Website <span className="font-normal text-[#89958d]">· Optional</span></label><input id="brand-website" name="website" type="url" defaultValue={brand?.website_url??""} placeholder="https://example.com" className="mt-2 w-full rounded-xl border border-[#dfe7e0] bg-white px-4 py-3 text-sm outline-none focus:border-[#176b4b]"/></div>
+    <div><label htmlFor="brand-description" className="block text-sm font-semibold">Description <span className="font-normal text-[#89958d]">· Optional</span></label><textarea id="brand-description" name="description" rows={4} maxLength={1000} defaultValue={brand?.description??""} placeholder="What does this brand do? Who does it serve?" className="mt-2 w-full resize-y rounded-xl border border-[#dfe7e0] bg-white px-4 py-3 text-sm outline-none focus:border-[#176b4b]"/></div>
+    <div className="flex items-center justify-end gap-3 border-t border-[#edf1ed] pt-5"><Link href="/app/brands" className="rounded-xl px-4 py-3 text-sm font-medium text-[#68766d] hover:bg-[#f5f8f5]">Cancel</Link><button className="rounded-xl bg-[#176b4b] px-5 py-3 text-sm font-semibold text-white">{brand?.id?"Save changes":"Create brand"}</button></div>
+  </form>;
+}

@@ -1,0 +1,68 @@
+name: SocialOS database validation
+
+on:
+  # Validate feature-branch changes through the PR event only. Running both
+  # push and pull_request for the same commit created duplicate DB stacks.
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: socialos-db-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-replay:
+    name: Replay all database migrations locally
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase database
+        run: supabase start
+
+      - name: Rebuild database from migration history
+        run: supabase db reset
+
+      - name: Verify migration ledger
+        run: |
+          supabase migration list
+          migration_files="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)"
+          if [ "$migration_files" -lt 1 ]; then
+            echo "No SQL migrations found" >&2
+            exit 1
+          fi
+          echo "Replayed $migration_files SQL migration files from a clean local database."
+
+      - name: Verify schema and security invariants
+        run: |
+          supabase db query --local -f supabase/tests/migration_smoke.sql
+
+      - name: Run multi-tenant isolation regression tests
+        run: supabase db query --local -f supabase/tests/tenant_isolation.sql
+
+      - name: Lint local database schema
+        run: supabase db lint --local --fail-on error
+
+      - name: Generate database types
+        run: |
+          supabase gen types typescript --local > /tmp/socialos.types.ts
+          test -s /tmp/socialos.types.ts
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop
