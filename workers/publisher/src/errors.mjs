@@ -1,7 +1,7 @@
 import { classifyProviderQuotaError } from "./provider-quota-intelligence.mjs";
 
 export class PublishError extends Error {
-  constructor(message, { code = "PUBLISH_FAILED", retryable = false, retryAfterMs = null, ambiguous = false, status = null, quotaScope = null, usage = null, businessId = null } = {}) {
+  constructor(message, { code = "PUBLISH_FAILED", retryable = false, retryAfterMs = null, ambiguous = false, status = null, quotaScope = null, usage = null, businessId = null, externalPostId = null } = {}) {
     super(message);
     this.name = "PublishError";
     this.code = code;
@@ -12,6 +12,8 @@ export class PublishError extends Error {
     this.quotaScope = quotaScope;
     this.usage = usage;
     this.businessId = businessId;
+    // Set when the provider confirmed a publication that SocialOS failed to record.
+    this.externalPostId = externalPostId;
   }
 }
 

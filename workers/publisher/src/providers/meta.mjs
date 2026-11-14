@@ -65,7 +65,7 @@ export async function publishInstagram({ account, token, post, media = [] }) {
   const publishParams = new URLSearchParams({ creation_id: container.id, access_token: token });
   const publish = await providerFetch(base + "/" + encodeURIComponent(account.external_account_id) + "/media_publish", {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: publishParams, signal: AbortSignal.timeout(60000)
-  });
+  }, "Instagram", { ambiguous: true });
   const result = await providerJson(publish, "Instagram");
   if (!result.id) throw new PublishError("Instagram did not return a publication ID.", { code: "PROVIDER_RESPONSE_INVALID", ambiguous: true });
   return { externalPostId: String(result.id), permalink: null };

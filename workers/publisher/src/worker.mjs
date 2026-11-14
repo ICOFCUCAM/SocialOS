@@ -270,7 +270,10 @@ async function fail(job, target, error) {
   await db.from("audit_events").insert({
     organization_id: job.organization_id, action: ambiguous ? "social.post.outcome_unknown" : "social.post.publish_failed",
     resource_type: "social_post_target", resource_id: target.id,
-    metadata: { error_code: ambiguous ? "PUBLISH_OUTCOME_UNKNOWN" : code, retryable, terminal }
+    metadata: {
+      error_code: ambiguous ? "PUBLISH_OUTCOME_UNKNOWN" : code, retryable, terminal,
+      ...(error?.externalPostId ? { external_post_id: error.externalPostId, cause_code: error.code } : {})
+    }
   });
 }
 
@@ -541,7 +544,17 @@ async function handleJob(job) {
       },
       media
     });
-    await finish(job, target, { ...publication, platform: context.account.platform });
+    try {
+      await finish(job, target, { ...publication, platform: context.account.platform });
+    } catch (recordError) {
+      // The provider has already published. If SocialOS cannot record that, the
+      // outcome must be reconciled, never retried, or the post would go out twice.
+      throw new PublishError("Published on the provider but SocialOS could not record the result: " + safeMessage(recordError), {
+        code: "PUBLISH_RECORD_FAILED",
+        ambiguous: true,
+        externalPostId: publication.externalPostId
+      });
+    }
   } catch (error) {
     if (rateLimitScope && (error?.status === 429 || error?.code === "YOUTUBE_DAILY_QUOTA_EXCEEDED" || error?.code === "YOUTUBE_RATE_LIMIT_EXCEEDED" || error?.code === "LINKEDIN_QUOTA_EXCEEDED")) {
       try { await deferProviderCapacity({ ...rateLimitScope, businessId: error.businessId || null, quotaScope: error.quotaScope || null }, error.retryAfterMs || 60000); }
