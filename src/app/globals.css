@@ -1,27 +1,171 @@
 @import "tailwindcss";
+
+/*
+ * SocialOS design tokens — "Signal" identity.
+ * Components use only the semantic tokens below (bg, surface, fg, border, accent, status).
+ * Raw hex values live here and nowhere else. See docs/design/brand.md.
+ */
 :root {
   color-scheme: light;
-  --ink: #19251f;
-  --muted: #738078;
-  --paper: #f7f9f6;
-  --green: #176b4b;
+
+  --bg: #f5f4ef;
+  --surface: #ffffff;
+  --surface-2: #edece6;
+  --surface-inverse: #0b0c0e;
+  --fg: #0b0c0e;
+  --fg-muted: #55585f;
+  --fg-subtle: #85888f;
+  --fg-inverse: #f5f4ef;
+  --border: #e2e0d8;
+  --border-strong: #c9c6bb;
+
+  /* Signal lime is a surface colour: always paired with ink text, never used as text on light. */
+  --accent: #c8f03c;
+  --accent-hover: #b9e22a;
+  --accent-fg: #0b0c0e;
+  /* Accessible lime for text, links and icons on light surfaces (≥ 4.5:1 on --bg). */
+  --accent-ink: #4a6b00;
+
+  --success: #1f7a45;
+  --warning: #a35f00;
+  --danger: #c2332b;
+  --info: #2f5bc8;
+
+  --ring: #4a6b00;
+  --shadow-color: 20 18 10;
 }
-* {
-  box-sizing: border-box;
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0b0c0e;
+    --surface: #141518;
+    --surface-2: #1c1e22;
+    --surface-inverse: #f5f4ef;
+    --fg: #f3f2ec;
+    --fg-muted: #a6a9b0;
+    --fg-subtle: #74777e;
+    --fg-inverse: #0b0c0e;
+    --border: #25272c;
+    --border-strong: #383b42;
+    --accent-ink: #c8f03c;
+    --success: #4cc27f;
+    --warning: #f0a53a;
+    --danger: #f06a61;
+    --info: #7a9cff;
+    --ring: #c8f03c;
+    --shadow-color: 0 0 0;
+  }
 }
-html,
-body {
-  min-height: 100%;
-  margin: 0;
+
+/* Forced dark: the whole page (<html data-theme="dark">) or any section that must stay dark. */
+:root[data-theme="dark"],
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0c0e;
+  --surface: #141518;
+  --surface-2: #1c1e22;
+  --surface-inverse: #f5f4ef;
+  --fg: #f3f2ec;
+  --fg-muted: #a6a9b0;
+  --fg-subtle: #74777e;
+  --fg-inverse: #0b0c0e;
+  --border: #25272c;
+  --border-strong: #383b42;
+  --accent-ink: #c8f03c;
+  --success: #4cc27f;
+  --warning: #f0a53a;
+  --danger: #f06a61;
+  --info: #7a9cff;
+  --ring: #c8f03c;
+  --shadow-color: 0 0 0;
 }
-body {
-  background: var(--paper);
-  color: var(--ink);
-  font-family: Arial, Helvetica, sans-serif;
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-inverse: var(--surface-inverse);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-inverse: var(--fg-inverse);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-ink: var(--accent-ink);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-ring: var(--ring);
+
+  /* Fixed brand colours for the logo: identical in every theme. */
+  --color-brand-ink: #0b0c0e;
+  --color-brand-signal: #c8f03c;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: "Bricolage Grotesque Variable", var(--font-geist-sans), ui-sans-serif, sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+
+  --shadow-soft:
+    0 1px 2px rgb(var(--shadow-color) / 0.06), 0 8px 24px rgb(var(--shadow-color) / 0.06);
+  --shadow-lift:
+    0 2px 4px rgb(var(--shadow-color) / 0.06), 0 24px 64px rgb(var(--shadow-color) / 0.12);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
-a {
-  color: inherit;
-  text-decoration: none;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    min-height: 100%;
+    margin: 0;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @page {
