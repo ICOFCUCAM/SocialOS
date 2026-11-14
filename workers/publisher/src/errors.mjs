@@ -1,11 +1,17 @@
+import { classifyProviderQuotaError } from "./provider-quota-intelligence.mjs";
+
 export class PublishError extends Error {
-  constructor(message, { code = "PUBLISH_FAILED", retryable = false, retryAfterMs = null, ambiguous = false } = {}) {
+  constructor(message, { code = "PUBLISH_FAILED", retryable = false, retryAfterMs = null, ambiguous = false, status = null, quotaScope = null, usage = null, businessId = null } = {}) {
     super(message);
     this.name = "PublishError";
     this.code = code;
     this.retryable = retryable;
     this.retryAfterMs = retryAfterMs;
     this.ambiguous = ambiguous;
+    this.status = status;
+    this.quotaScope = quotaScope;
+    this.usage = usage;
+    this.businessId = businessId;
   }
 }
 
@@ -35,11 +41,23 @@ export async function providerJson(response, provider) {
   if (!response.ok) {
     const retryable = response.status === 429 || response.status >= 500;
     const retryAfter = Number(response.headers.get("retry-after"));
+    const quota = classifyProviderQuotaError(provider, body);
+    const headerRetryAfter = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : null;
+    const metaUsage = provider === "Facebook" || provider === "Instagram"
+      ? (await import("./provider-quota-intelligence.mjs")).parseMetaUsageHeaders(response.headers)
+      : null;
+    const businessCooldown = metaUsage?.business
+      ?.filter(item => Number.isFinite(item.retryAfterMs) && item.retryAfterMs > 0)
+      .sort((a,b) => b.retryAfterMs-a.retryAfterMs)[0] || null;
     throw new PublishError(provider + " API returned HTTP " + response.status, {
-      code: response.status === 401 ? "AUTHORIZATION_REVOKED" : response.status === 403 ? "PROVIDER_PERMISSION_DENIED" : provider.toUpperCase() + "_HTTP_" + response.status,
-      retryable,
-      retryAfterMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : null,
-      ambiguous: response.status >= 500
+      code: quota?.code || (response.status === 401 ? "AUTHORIZATION_REVOKED" : response.status === 403 ? "PROVIDER_PERMISSION_DENIED" : provider.toUpperCase() + "_HTTP_" + response.status),
+      retryable: quota?.retryable ?? retryable,
+      retryAfterMs: headerRetryAfter ?? quota?.retryAfterMs ?? businessCooldown?.retryAfterMs ?? null,
+      ambiguous: response.status >= 500,
+      status: response.status,
+      quotaScope: quota?.quotaScope || (businessCooldown ? "business_use_case" : null),
+      businessId: businessCooldown?.businessId || null,
+      usage: metaUsage
     });
   }
   return body;

@@ -69,8 +69,8 @@ The worker claims due jobs, loads tenant-scoped post/target/account records, ref
 - Ambiguous provider outcomes are dead-lettered for manual reconciliation.
 - Expired worker leases without a recorded provider post ID are dead-lettered rather than blindly retried.
 - An expired or revoked refresh grant requires user reconnection.
-- Migration `0011_publish_worker_lease_recovery.sql` handles publishing leases.
-- Migration `0012_oauth_token_refresh_lock.sql` serializes token refresh operations.
+- Migration `20261110000300_publish_worker_lease_recovery.sql` handles publishing leases.
+- Migration `20261110000400_oauth_token_refresh_lock.sql` serializes token refresh operations.
 
 ## Operational requirements and limitations
 

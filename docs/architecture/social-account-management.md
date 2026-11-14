@@ -18,7 +18,7 @@ A token expiring within seven days is displayed as expiring soon. Providers that
 
 ## Disconnect
 
-Only workspace owners, administrators and managers can disconnect an account. The server invokes migration `0013_atomic_social_account_disconnect.sql` after authorization. The database performs credential deletion, account-state transition and audit insertion in one transaction. The server:
+Only workspace owners, administrators and managers can disconnect an account. The server invokes migration `20261110000500_atomic_social_account_disconnect.sql` after authorization. The database performs credential deletion, account-state transition and audit insertion in one transaction. The server:
 1. authenticates the current user;
 2. confirms active manager membership in the same organization;
 3. confirms the account is visible under brand-scoped RLS and belongs to that organization;
@@ -38,6 +38,20 @@ Accounts in reauthorization-required, expired, disconnected or error states can 
 - Token metadata is returned with `Cache-Control: no-store`.
 - The dashboard does not claim that a connected account has every publishing permission. It displays granted scopes for operator review.
 - TikTok, Threads, Pinterest and X are listed as planned integrations; they are not presented as live publishing adapters.
-- Apply migration `0013_atomic_social_account_disconnect.sql` after migrations `0001` through `0012` before using disconnect.
+- Apply migration `20261110000500_atomic_social_account_disconnect.sql` after the preceding migrations before using disconnect.
 
 The account-management API and UI have not been tested against a live SocialOS Supabase project in this change.
+
+
+## Provider health and account reliability
+
+The connected channels page includes a provider health panel backed by `GET /api/social/accounts/health`.
+
+- The endpoint requires an authenticated user and an active workspace membership. It scopes account and token metadata queries to that workspace.
+- Credential metadata is read server-side using the service client, but only expiry timestamps, refresh timestamps and boolean refresh-token availability are returned. Access-token ciphertext, nonce, authentication tag and plaintext are never returned.
+- Health classifications distinguish healthy, warning, action-required, error, disconnected and pending accounts.
+- Access tokens expiring within seven days are warnings. Expired access tokens, expired refresh tokens or an account explicitly marked for reauthorization require action. Missing token records and credential errors are surfaced.
+- Unknown expiry is not represented as confirmed healthy. Meta connections without a refresh-token flow may require reconnection when the provider invalidates a token; the health panel does not promise automatic refresh.
+- The panel offers a manual refresh of the health snapshot. It does not itself call provider APIs or force token refresh.
+
+This is a credential and connection health snapshot, not a provider uptime monitor. Provider API reachability checks, endpoint quota telemetry and scheduled pre-campaign delivery risk scoring remain future capabilities.

@@ -1,7 +1,7 @@
 # Campaign Performance & Analytics
 
 ## Scope
-Migration `0016_post_analytics.sql` introduces a tenant-scoped normalised store for provider-reported post metrics. The Analytics workspace separates daily time-series rows from lifetime snapshots, groups results by provider, and attributes daily rows to linked campaigns.
+Migration `20261110000800_post_analytics.sql` introduces a tenant-scoped normalised store for provider-reported post metrics. The Analytics workspace separates daily time-series rows from lifetime snapshots, groups results by provider, and attributes daily rows to linked campaigns.
 
 ## Metric model
 Each row is one provider target and one metric date. Common fields include impressions, reach, engagements, likes, comments, shares, saves, clicks and video views. Nullable values mean the provider did not report that metric; they are not treated as zero by the storage contract. Provider-specific numeric values may be stored in the allowlisted `provider_metrics` object.

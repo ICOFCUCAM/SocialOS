@@ -2,6 +2,7 @@ name: SocialOS CI
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches: [main, "feat/**"]
 
@@ -20,9 +21,18 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Install publisher worker dependencies
+        run: npm install --prefix workers/publisher --no-package-lock --no-audit --no-fund
       - name: Publisher worker syntax and tests
         run: |
           node --check workers/publisher/src/worker.mjs
+          node --check workers/publisher/src/provider-rate-limits.mjs
+          node --check workers/publisher/src/provider-quota-intelligence.mjs
+          node --check workers/publisher/src/errors.mjs
+          node --check workers/publisher/src/content-version.mjs
+          node --check workers/publisher/src/provider-operation-state.mjs
+          node --check workers/publisher/src/providers/meta.mjs
+          node --check workers/publisher/src/providers/index.mjs
           node --check workers/analytics-collector/src/collector.mjs
           node --check workers/analytics-collector/src/meta-insights.mjs
           node --check workers/analytics-collector/src/linkedin-insights.mjs

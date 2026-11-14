@@ -22,6 +22,7 @@ export function SocialPostComposer({organizationId,brands,accounts,assets:initia
   const [body,setBody]=useState("");
   const [selectedAccounts,setSelectedAccounts]=useState<string[]>([]);
   const [selectedAssets,setSelectedAssets]=useState<string[]>([]);
+  const [accountVersions,setAccountVersions]=useState<Record<string,{body:string;assetIds:string[]}>>({});
   const [assets,setAssets]=useState(initialAssets);
   const [scheduleMode,setScheduleMode]=useState<"draft"|"schedule">("draft");
   const [scheduledAt,setScheduledAt]=useState(localDateTime);
@@ -103,14 +104,16 @@ export function SocialPostComposer({organizationId,brands,accounts,assets:initia
     if(unsupportedSelected.length)return setError("Resolve unsupported destinations: "+unsupportedSelected.map(account=>account.platform?.name||account.account_name).join(", ")+".");
     if(scheduleMode==="schedule"&&(!scheduledAt||new Date(scheduledAt).getTime()<=Date.now()))return setError("Choose a future publishing date and time.");
     const unavailable=selectedAssets.filter(id=>!readyAssets.some(asset=>asset.id===id));
-    if(unavailable.length)return setError("One or more selected assets are not ready. Refresh media status or remove them.");
+    const versionUnavailable=Object.values(accountVersions).flatMap(version=>version.assetIds).filter(id=>!readyAssets.some(asset=>asset.id===id));
+    if(unavailable.length||versionUnavailable.length)return setError("One or more selected assets are not ready. Refresh media status or remove them.");
     setBusy(true);
     try{
       const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
       const response=await fetch("/api/social/posts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
         organizationId,brandId,title,body,timezone,
         scheduledAt:scheduleMode==="schedule"?new Date(scheduledAt).toISOString():null,
-        targetAccountIds:selectedAccounts,assetIds:selectedAssets
+        targetAccountIds:selectedAccounts,assetIds:selectedAssets,
+        accountVersions:selectedAccounts.filter(id=>accountVersions[id]).map(accountId=>({accountId,...accountVersions[accountId]}))
       })});
       const data=await response.json();
       if(!response.ok)throw new Error(data.error||"The post could not be created.");
@@ -143,6 +146,26 @@ export function SocialPostComposer({organizationId,brands,accounts,assets:initia
         <h3 className="text-sm font-semibold">Publishing destinations</h3><p className="mt-1 text-xs leading-5 text-[#89958d]">Select connected accounts for this brand.</p>
         <div className="mt-4 space-y-2">{availableAccounts.length?availableAccounts.map(account=>{const issue=mediaIssue(account);return <label key={account.id} className={`flex items-start gap-3 rounded-xl border p-3 ${issue?"border-[#eee5d6] bg-[#fcfaf5]":"border-[#edf1ed]"}`}><input type="checkbox" checked={selectedAccounts.includes(account.id)} disabled={!account.capability.publishingEnabled} onChange={e=>setSelectedAccounts(current=>e.target.checked?[...current,account.id]:current.filter(id=>id!==account.id))} className="mt-0.5 h-4 w-4 accent-[#176b4b]"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{account.account_name}</span><span className="mt-0.5 block text-[10px] text-[#89958d]">{account.platform?.name||"Social channel"} · {account.capability.publishingEnabled?"Publishing supported":"Publishing unavailable"}</span>{issue&&<span className="mt-1 block text-[10px] leading-4 text-[#8a6a28]">{issue}</span>}</span>{account.capability.publishingEnabled?<CheckCircle2 size={14} className="text-[#176b4b]"/>:<span className="text-[10px] text-[#8a6a28]">Unavailable</span>}</label> }):<div className="rounded-xl border border-dashed border-[#dfe7df] p-4 text-xs leading-5 text-[#89958d]">No connected accounts for this brand. Connect a supported account before creating a post.</div>}</div>
       </section>
+      {selectedAccounts.length>0&&<section className="rounded-2xl border border-[#e6ece6] bg-white p-5">
+        <h3 className="text-sm font-semibold">Account-specific content</h3>
+        <p className="mt-1 text-xs leading-5 text-[#89958d]">Give each destination its own caption and media. Leave an account unchanged to use the shared post content.</p>
+        <div className="mt-4 space-y-4">{selectedAccounts.map(accountId=>{
+          const account=availableAccounts.find(item=>item.id===accountId);
+          const version=accountVersions[accountId];
+          return <div key={accountId} className="rounded-xl border border-[#edf1ed] p-3">
+            <div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold">{account?.account_name||"Selected account"}</p><button type="button" onClick={()=>setAccountVersions(current=>{const next={...current};if(next[accountId])delete next[accountId];else next[accountId]={body,assetIds:[...selectedAssets]};return next;})} className="text-[10px] font-semibold text-[#176b4b]">{version?"Use shared content":"Edit version"}</button></div>
+            {version&&<>
+              <label className="mt-3 block text-[10px] font-semibold text-[#53665a]">Caption for this account</label>
+              <textarea value={version.body} maxLength={20000} rows={4} onChange={e=>setAccountVersions(current=>({...current,[accountId]:{...version,body:e.target.value}}))} className="mt-2 w-full rounded-lg border border-[#dfe7e0] px-3 py-2 text-xs leading-5 outline-none focus:border-[#176b4b]"/>
+              <p className="mt-3 text-[10px] font-semibold text-[#53665a]">Media for this account</p>
+              <div className="mt-2 space-y-2">{readyAssets.length?readyAssets.map(asset=><label key={asset.id} className="flex items-center gap-2 text-[10px] text-[#66756a]">
+                <input type="checkbox" checked={version.assetIds.includes(asset.id)} onChange={e=>setAccountVersions(current=>({...current,[accountId]:{...version,assetIds:e.target.checked?[...version.assetIds,asset.id]:version.assetIds.filter(id=>id!==asset.id)}}))} className="h-3.5 w-3.5 accent-[#176b4b]"/>
+                <span className="truncate">{asset.original_filename||"Media asset"}</span>
+              </label>):<p className="text-[10px] text-[#89958d]">No ready media assets. This version will publish without media.</p>}</div>
+            </>}
+          </div>;
+        })}</div>
+      </section>}
       <section className="rounded-2xl border border-[#e6ece6] bg-white p-5">
         <h3 className="text-sm font-semibold">When should it publish?</h3>
         <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={()=>setScheduleMode("draft")} className={`rounded-xl border px-3 py-2.5 text-xs font-semibold ${scheduleMode==="draft"?"border-[#176b4b] bg-[#edf5ef] text-[#176b4b]":"border-[#e6ece6] text-[#7d8a80]"}`}>Save draft</button><button type="button" onClick={()=>setScheduleMode("schedule")} className={`rounded-xl border px-3 py-2.5 text-xs font-semibold ${scheduleMode==="schedule"?"border-[#176b4b] bg-[#edf5ef] text-[#176b4b]":"border-[#e6ece6] text-[#7d8a80]"}`}>Schedule</button></div>

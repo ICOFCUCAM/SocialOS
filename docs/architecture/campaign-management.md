@@ -6,7 +6,7 @@ Campaigns provide a planning layer above individual social posts. Each campaign 
 
 ## Data model
 
-Migration `0015_campaign_management.sql` adds:
+Migration `20261110000700_campaign_management.sql` adds:
 - `social_campaigns`: campaign strategy and lifecycle.
 - `social_campaign_posts`: association between a campaign and existing posts from the same brand/workspace.
 
