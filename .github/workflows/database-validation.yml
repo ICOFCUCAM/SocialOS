@@ -30,7 +30,8 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: an unpinned "latest" CLI broke this job when 3.x dropped [inbucket].
+          version: 3.1.0
 
       - name: Start local Supabase database
         run: supabase start
@@ -50,17 +51,17 @@ jobs:
 
       - name: Verify schema and security invariants
         run: |
-          supabase db query --local -f supabase/tests/migration_smoke.sql
+          supabase db query -f supabase/tests/migration_smoke.sql
 
       - name: Run multi-tenant isolation regression tests
-        run: supabase db query --local -f supabase/tests/tenant_isolation.sql
+        run: supabase db query -f supabase/tests/tenant_isolation.sql
 
       - name: Lint local database schema
-        run: supabase db lint --local --fail-on error
+        run: supabase db lint --fail-on error
 
       - name: Generate database types
         run: |
-          supabase gen types typescript --local > /tmp/socialos.types.ts
+          supabase gen types typescript > /tmp/socialos.types.ts
           test -s /tmp/socialos.types.ts
 
       - name: Stop local Supabase
