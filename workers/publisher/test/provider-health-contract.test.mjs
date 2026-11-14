@@ -4,19 +4,16 @@ import { readFile } from "node:fs/promises";
 
 const api = await readFile(
   new URL("../../../src/app/api/social/accounts/health/route.ts", import.meta.url),
-  "utf8"
+  "utf8",
 );
 const panel = await readFile(
   new URL("../../../src/components/app/provider-health-panel.tsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
-const workspace = await readFile(
-  new URL("../../../src/lib/workspace.ts", import.meta.url),
-  "utf8"
-);
+const workspace = await readFile(new URL("../../../src/lib/workspace.ts", import.meta.url), "utf8");
 const channels = await readFile(
   new URL("../../../src/app/(protected)/app/channels/page.tsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
 
 test("provider health endpoint requires authenticated active workspace membership", () => {

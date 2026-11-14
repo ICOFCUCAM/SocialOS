@@ -4,21 +4,21 @@ import { readFile } from "node:fs/promises";
 
 const api = await readFile(
   new URL("../../../src/app/api/social/publishing/readiness/route.ts", import.meta.url),
-  "utf8"
+  "utf8",
 );
 const component = await readFile(
   new URL("../../../src/components/app/publish-readiness-check.tsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
 const calendar = await readFile(
   new URL("../../../src/app/(protected)/app/calendar/page.tsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
 
 test("readiness endpoint requires authentication and verifies workspace membership", () => {
   assert.match(api, /auth\.getUser\(\)/);
   assert.match(api, /organization_members/);
-  assert.match(api, /status","active"/);
+  assert.match(api, /status",\s*"active"/);
 });
 
 test("readiness evaluates account-specific content, media, provider and credentials", () => {
@@ -32,7 +32,7 @@ test("readiness evaluates account-specific content, media, provider and credenti
 });
 
 test("readiness is advisory and reports blockers and warnings per destination", () => {
-  assert.match(api, /severity:"blocker"\|"warning"\|"info"/);
+  assert.match(api, /severity:\s*"blocker"\s*\|\s*"warning"\s*\|\s*"info"/);
   assert.match(api, /summary:/);
   assert.match(api, /readiness,/);
   assert.match(component, /Assessment is advisory/);

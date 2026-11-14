@@ -8,8 +8,12 @@ export function resolveTargetContent({ defaultVersion, accountVersion = null, ta
   return {
     ...selected,
     body: accountVersion ? accountVersion.body : (target.caption_override ?? defaultVersion.body),
-    platform_options: accountVersion?.platform_options ?? target.platform_options ?? defaultVersion.platform_options ?? {},
+    platform_options:
+      accountVersion?.platform_options ??
+      target.platform_options ??
+      defaultVersion.platform_options ??
+      {},
     versionId: selected.id,
-    isAccountSpecific: Boolean(accountVersion)
+    isAccountSpecific: Boolean(accountVersion),
   };
 }

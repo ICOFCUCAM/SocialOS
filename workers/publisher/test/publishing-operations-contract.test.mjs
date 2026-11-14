@@ -4,11 +4,11 @@ import { readFile } from "node:fs/promises";
 
 const migration = await readFile(
   new URL("../../../supabase/migrations/20261110001200_publishing_operations.sql", import.meta.url),
-  "utf8"
+  "utf8",
 );
 const api = await readFile(
   new URL("../../../src/app/api/social/publishing/operations/route.ts", import.meta.url),
-  "utf8"
+  "utf8",
 );
 const worker = await readFile(new URL("../src/worker.mjs", import.meta.url), "utf8");
 

@@ -21,6 +21,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Formatting
+        run: npm run format:check
       - name: Install publisher worker dependencies
         run: npm install --prefix workers/publisher --no-package-lock --no-audit --no-fund
       - name: Publisher worker syntax and tests

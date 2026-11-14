@@ -23,7 +23,7 @@ function fakeRedis() {
         if (nowOrUntil > current) values.set(key, nowOrUntil);
       }
       return ttl;
-    }
+    },
   };
 }
 
@@ -34,21 +34,37 @@ test("provider cooldown applies across shared app and account scopes", async () 
   await limiter.defer(scope, 45000, 1000);
   assert.equal(await limiter.waitTimeMs(scope, 2000), 44000);
   assert.equal(await limiter.waitTimeMs({ ...scope, accountId: "account-2" }, 2000), 0);
-  assert.equal(await limiter.waitTimeMs({ ...scope, platform: "facebook", accountId: "account-3" }, 2000), 0);
+  assert.equal(
+    await limiter.waitTimeMs({ ...scope, platform: "facebook", accountId: "account-3" }, 2000),
+    0,
+  );
 });
 
 test("app-level cooldown coordinates different accounts using the same provider app", async () => {
   const redis = fakeRedis();
   const limiter = createProviderRateLimiter({ redis });
   await limiter.defer({ platform: "youtube", appId: "google-client", accountId: "a" }, 60000, 1000);
-  assert.equal(await limiter.waitTimeMs({ platform: "youtube", appId: "google-client", accountId: "b" }, 1000), 60000);
+  assert.equal(
+    await limiter.waitTimeMs({ platform: "youtube", appId: "google-client", accountId: "b" }, 1000),
+    60000,
+  );
 });
 
 test("cooldown duration is bounded to six hours", async () => {
   const redis = fakeRedis();
   const limiter = createProviderRateLimiter({ redis });
-  await limiter.defer({ platform: "linkedin", appId: "li-app", accountId: "li-account" }, 24 * 60 * 60 * 1000, 1000);
-  assert.equal(await limiter.waitTimeMs({ platform: "linkedin", appId: "li-app", accountId: "li-account" }, 1000), 6 * 60 * 60 * 1000);
+  await limiter.defer(
+    { platform: "linkedin", appId: "li-app", accountId: "li-account" },
+    24 * 60 * 60 * 1000,
+    1000,
+  );
+  assert.equal(
+    await limiter.waitTimeMs(
+      { platform: "linkedin", appId: "li-app", accountId: "li-account" },
+      1000,
+    ),
+    6 * 60 * 60 * 1000,
+  );
 });
 
 test("an explicit application quota scope applies a Meta cooldown app-wide", async () => {

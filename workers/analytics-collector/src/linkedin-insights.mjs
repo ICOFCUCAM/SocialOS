@@ -7,7 +7,7 @@ const METRICS = [
   ["POST_SAVE", "saves", true],
   ["LINK_CLICKS", "clicks", true],
   ["FOLLOWER_GAINED_FROM_CONTENT", "followers_gained", true],
-  ["PROFILE_VIEW_FROM_CONTENT", "profile_visits", true]
+  ["PROFILE_VIEW_FROM_CONTENT", "profile_visits", true],
 ];
 
 function apiVersion() {
@@ -37,19 +37,25 @@ async function queryMetric(urn, metric, token, fetchImpl) {
       Authorization: "Bearer " + token,
       Accept: "application/json",
       "Linkedin-Version": apiVersion(),
-      "X-Restli-Protocol-Version": "2.0.0"
+      "X-Restli-Protocol-Version": "2.0.0",
     },
     signal: AbortSignal.timeout(30000),
-    cache: "no-store"
+    cache: "no-store",
   });
   let payload = {};
-  try { payload = await response.json(); } catch { /* handled below */ }
+  try {
+    payload = await response.json();
+  } catch {
+    /* handled below */
+  }
   if (!response.ok) {
-    const error = new Error(response.status === 401 || response.status === 403
-      ? "LinkedIn post analytics access is unavailable; reconnect with analytics permission and verify Community Management API access."
-      : response.status === 429 || response.status >= 500
-        ? "LinkedIn analytics is temporarily unavailable."
-        : "LinkedIn rejected an analytics metric request.");
+    const error = new Error(
+      response.status === 401 || response.status === 403
+        ? "LinkedIn post analytics access is unavailable; reconnect with analytics permission and verify Community Management API access."
+        : response.status === 429 || response.status >= 500
+          ? "LinkedIn analytics is temporarily unavailable."
+          : "LinkedIn rejected an analytics metric request.",
+    );
     error.retryable = response.status === 429 || response.status >= 500;
     error.reauthorize = response.status === 401 || response.status === 403;
     error.unsupportedMetric = response.status === 400;
@@ -60,7 +66,12 @@ async function queryMetric(urn, metric, token, fetchImpl) {
   return typeof count === "number" && Number.isFinite(count) ? count : null;
 }
 
-export async function collectLinkedInInsights(target, token, fetchImpl = fetch, pause = async () => {}) {
+export async function collectLinkedInInsights(
+  target,
+  token,
+  fetchImpl = fetch,
+  pause = async () => {},
+) {
   const metrics = {};
   let successful = 0;
   for (const [metric, field, optional = false] of METRICS) {
@@ -78,29 +89,33 @@ export async function collectLinkedInInsights(target, token, fetchImpl = fetch, 
   }
   if (!successful) return [];
   const engagementParts = [metrics.likes, metrics.comments, metrics.shares];
-  const engagements = engagementParts.some(value => value !== null)
+  const engagements = engagementParts.some((value) => value !== null)
     ? engagementParts.reduce((sum, value) => sum + (value ?? 0), 0)
     : null;
-  return [{
-    organization_id: target.organization_id,
-    target_id: target.id,
-    metric_date: new Date().toISOString().slice(0, 10),
-    period_type: "lifetime",
-    impressions: metrics.impressions,
-    reach: metrics.reach,
-    engagements,
-    likes: metrics.likes,
-    comments: metrics.comments,
-    shares: metrics.shares,
-    saves: metrics.saves,
-    clicks: metrics.clicks,
-    followers_gained: metrics.followers_gained,
-    profile_visits: metrics.profile_visits,
-    provider_metrics: {
-      provider: "linkedin",
-      metric_semantics: "lifetime_snapshot",
-      metrics_collected: Object.entries(metrics).filter(([, value]) => value !== null).map(([field]) => field)
+  return [
+    {
+      organization_id: target.organization_id,
+      target_id: target.id,
+      metric_date: new Date().toISOString().slice(0, 10),
+      period_type: "lifetime",
+      impressions: metrics.impressions,
+      reach: metrics.reach,
+      engagements,
+      likes: metrics.likes,
+      comments: metrics.comments,
+      shares: metrics.shares,
+      saves: metrics.saves,
+      clicks: metrics.clicks,
+      followers_gained: metrics.followers_gained,
+      profile_visits: metrics.profile_visits,
+      provider_metrics: {
+        provider: "linkedin",
+        metric_semantics: "lifetime_snapshot",
+        metrics_collected: Object.entries(metrics)
+          .filter(([, value]) => value !== null)
+          .map(([field]) => field),
+      },
+      collected_at: new Date().toISOString(),
     },
-    collected_at: new Date().toISOString()
-  }];
+  ];
 }

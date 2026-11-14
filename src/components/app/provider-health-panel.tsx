@@ -1,26 +1,222 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, CircleAlert, Clock3, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
-type Account={accountId:string;accountName:string;username:string|null;platformName:string;health:string;reason:string|null;tokenHealth:string;refreshHealth:string;accessTokenExpiresAt:string|null;lastRefreshedAt:string|null;lastVerifiedAt:string|null};
-type Payload={summary:{total:number;healthy:number;warning:number;actionRequired:number;error:number;disconnected:number};accounts:Account[]};
-function date(value:string|null){if(!value)return "Not reported";const d=new Date(value);return Number.isNaN(d.getTime())?"Unavailable":new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(d);}
-function tone(value:string){return value==="healthy"?"bg-[#edf5ef] text-[#176b4b]":["action_required","error"].includes(value)?"bg-[#fbefed] text-[#9a4b3d]":["warning","pending"].includes(value)?"bg-[#faf5e8] text-[#8a6a28]":"bg-[#f1f3f1] text-[#77847b]";}
-function label(value:string){return value.replaceAll("_"," ");}
-export function ProviderHealthPanel(){
- const [data,setData]=useState<Payload|null>(null);const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [updated,setUpdated]=useState("");
- async function load(manual=false){manual?setBusy(true):setLoading(true);setError("");try{const r=await fetch("/api/social/accounts/health",{cache:"no-store"});const j=await r.json();if(!r.ok)throw new Error(j.error||"Unable to load account health.");setData(j);setUpdated(new Date().toISOString());}catch(e){setError(e instanceof Error?e.message:"Unable to load account health.");}finally{setLoading(false);setBusy(false);}}
- useEffect(()=>{void load();},[]);
- const attention=useMemo(()=>data?.accounts.filter(a=>["action_required","error","warning","pending"].includes(a.health))??[],[data]);
- const metrics=[["Healthy",data?.summary.healthy??0,CheckCircle2],["Warnings",data?.summary.warning??0,AlertTriangle],["Reconnect",data?.summary.actionRequired??0,CircleAlert],["Errors",data?.summary.error??0,CircleAlert],["Disconnected",data?.summary.disconnected??0,Activity],["Total",data?.summary.total??0,ShieldCheck]] as const;
- return <section className="space-y-4">
-  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><div className="flex items-center gap-2"><ShieldCheck size={17} className="text-[#176b4b]"/><h2 className="text-sm font-semibold">Provider health</h2></div><p className="mt-1 text-xs text-[#89958d]">Connection status, credential expiry and account reliability.</p></div><div className="flex items-center gap-3"><span className="text-[10px] text-[#9aa49d]">{updated?"Updated "+date(updated):"Live account check"}</span><button type="button" onClick={()=>void load(true)} disabled={loading||busy} className="inline-flex items-center gap-1.5 rounded-lg border border-[#dfe7e0] bg-white px-3 py-2 text-[11px] font-semibold text-[#53665a] disabled:opacity-50">{busy?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} Refresh</button></div></div>
-  {error&&<div role="alert" className="rounded-xl border border-[#ead8cf] bg-[#fffaf8] px-4 py-3 text-xs text-[#9a4b3d]">{error}</div>}
-  {loading&&!data?<div className="rounded-2xl border border-[#e6ece6] bg-white px-5 py-12 text-center text-xs text-[#89958d]"><Loader2 size={18} className="mx-auto mb-2 animate-spin"/>Checking connected accounts…</div>:<>
-   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-6">{metrics.map(([name,value,Icon])=><article key={name} className="rounded-xl border border-[#e6ece6] bg-white p-4"><div className="flex items-center justify-between"><span className="text-[11px] text-[#77847b]">{name}</span><Icon size={14} className="text-[#89958d]"/></div><p className="mt-3 text-2xl font-semibold tabular-nums">{value}</p></article>)}</div>
-   <div className="rounded-2xl border border-[#e6ece6] bg-white"><div className="flex items-center justify-between border-b border-[#edf1ed] px-5 py-4"><div><h3 className="text-xs font-semibold">Account reliability</h3><p className="mt-1 text-[11px] text-[#89958d]">{data?.accounts.length??0} linked accounts</p></div><span className="text-[10px] text-[#9aa49d]">Credential values never exposed</span></div>
-    {data?.accounts.length?<div className="divide-y divide-[#edf1ed]">{data.accounts.map(a=><article key={a.accountId} className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h4 className="text-xs font-semibold">{a.accountName}</h4><span className="text-[10px] text-[#9aa49d]">{a.platformName}{a.username?" · @"+a.username:""}</span><span className={"rounded-full px-2 py-1 text-[9px] font-semibold capitalize "+tone(a.health)}>{label(a.health)}</span></div>{a.reason&&<p className="mt-1.5 text-[11px] text-[#9a6258]">{a.reason}</p>}<p className="mt-1 text-[10px] text-[#89958d]">Access token: {label(a.tokenHealth)} · Refresh token: {label(a.refreshHealth)}</p></div><div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[10px] text-[#89958d] lg:min-w-[330px]"><span className="flex items-center gap-1"><Clock3 size={11}/> Access expiry</span><span>{date(a.accessTokenExpiresAt)}</span><span>Last refreshed</span><span>{date(a.lastRefreshedAt)}</span><span>Last verified</span><span>{date(a.lastVerifiedAt)}</span></div></article>)}</div>:<p className="px-5 py-10 text-center text-xs text-[#89958d]">No social accounts linked to this workspace.</p>}
-   </div>
-   {attention.length>0&&<div className="rounded-xl border border-[#eadfc7] bg-[#fffdf8] px-4 py-3"><p className="text-xs font-semibold text-[#7f6431]">{attention.length} account{attention.length===1?" needs":"s need"} attention</p><p className="mt-1 text-[11px] leading-5 text-[#8b7955]">Review affected connections before relying on them for critical campaigns. Automatic refresh depends on provider adapter support.</p></div>}
-  </>}
- </section>;
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  CircleAlert,
+  Clock3,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
+type Account = {
+  accountId: string;
+  accountName: string;
+  username: string | null;
+  platformName: string;
+  health: string;
+  reason: string | null;
+  tokenHealth: string;
+  refreshHealth: string;
+  accessTokenExpiresAt: string | null;
+  lastRefreshedAt: string | null;
+  lastVerifiedAt: string | null;
+};
+type Payload = {
+  summary: {
+    total: number;
+    healthy: number;
+    warning: number;
+    actionRequired: number;
+    error: number;
+    disconnected: number;
+  };
+  accounts: Account[];
+};
+function date(value: string | null) {
+  if (!value) return "Not reported";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? "Unavailable"
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(d);
+}
+function tone(value: string) {
+  return value === "healthy"
+    ? "bg-[#edf5ef] text-[#176b4b]"
+    : ["action_required", "error"].includes(value)
+      ? "bg-[#fbefed] text-[#9a4b3d]"
+      : ["warning", "pending"].includes(value)
+        ? "bg-[#faf5e8] text-[#8a6a28]"
+        : "bg-[#f1f3f1] text-[#77847b]";
+}
+function label(value: string) {
+  return value.replaceAll("_", " ");
+}
+export function ProviderHealthPanel() {
+  const [data, setData] = useState<Payload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [updated, setUpdated] = useState("");
+  async function load(manual = false) {
+    manual ? setBusy(true) : setLoading(true);
+    setError("");
+    try {
+      const r = await fetch("/api/social/accounts/health", { cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Unable to load account health.");
+      setData(j);
+      setUpdated(new Date().toISOString());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to load account health.");
+    } finally {
+      setLoading(false);
+      setBusy(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+  const attention = useMemo(
+    () =>
+      data?.accounts.filter((a) =>
+        ["action_required", "error", "warning", "pending"].includes(a.health),
+      ) ?? [],
+    [data],
+  );
+  const metrics = [
+    ["Healthy", data?.summary.healthy ?? 0, CheckCircle2],
+    ["Warnings", data?.summary.warning ?? 0, AlertTriangle],
+    ["Reconnect", data?.summary.actionRequired ?? 0, CircleAlert],
+    ["Errors", data?.summary.error ?? 0, CircleAlert],
+    ["Disconnected", data?.summary.disconnected ?? 0, Activity],
+    ["Total", data?.summary.total ?? 0, ShieldCheck],
+  ] as const;
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div>
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={17} className="text-[#176b4b]" />
+            <h2 className="text-sm font-semibold">Provider health</h2>
+          </div>
+          <p className="mt-1 text-xs text-[#89958d]">
+            Connection status, credential expiry and account reliability.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-[#9aa49d]">
+            {updated ? "Updated " + date(updated) : "Live account check"}
+          </span>
+          <button
+            type="button"
+            onClick={() => void load(true)}
+            disabled={loading || busy}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#dfe7e0] bg-white px-3 py-2 text-[11px] font-semibold text-[#53665a] disabled:opacity-50"
+          >
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}{" "}
+            Refresh
+          </button>
+        </div>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="rounded-xl border border-[#ead8cf] bg-[#fffaf8] px-4 py-3 text-xs text-[#9a4b3d]"
+        >
+          {error}
+        </div>
+      )}
+      {loading && !data ? (
+        <div className="rounded-2xl border border-[#e6ece6] bg-white px-5 py-12 text-center text-xs text-[#89958d]">
+          <Loader2 size={18} className="mx-auto mb-2 animate-spin" />
+          Checking connected accounts…
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-6">
+            {metrics.map(([name, value, Icon]) => (
+              <article key={name} className="rounded-xl border border-[#e6ece6] bg-white p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-[#77847b]">{name}</span>
+                  <Icon size={14} className="text-[#89958d]" />
+                </div>
+                <p className="mt-3 text-2xl font-semibold tabular-nums">{value}</p>
+              </article>
+            ))}
+          </div>
+          <div className="rounded-2xl border border-[#e6ece6] bg-white">
+            <div className="flex items-center justify-between border-b border-[#edf1ed] px-5 py-4">
+              <div>
+                <h3 className="text-xs font-semibold">Account reliability</h3>
+                <p className="mt-1 text-[11px] text-[#89958d]">
+                  {data?.accounts.length ?? 0} linked accounts
+                </p>
+              </div>
+              <span className="text-[10px] text-[#9aa49d]">Credential values never exposed</span>
+            </div>
+            {data?.accounts.length ? (
+              <div className="divide-y divide-[#edf1ed]">
+                {data.accounts.map((a) => (
+                  <article
+                    key={a.accountId}
+                    className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-center"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-xs font-semibold">{a.accountName}</h4>
+                        <span className="text-[10px] text-[#9aa49d]">
+                          {a.platformName}
+                          {a.username ? " · @" + a.username : ""}
+                        </span>
+                        <span
+                          className={
+                            "rounded-full px-2 py-1 text-[9px] font-semibold capitalize " +
+                            tone(a.health)
+                          }
+                        >
+                          {label(a.health)}
+                        </span>
+                      </div>
+                      {a.reason && <p className="mt-1.5 text-[11px] text-[#9a6258]">{a.reason}</p>}
+                      <p className="mt-1 text-[10px] text-[#89958d]">
+                        Access token: {label(a.tokenHealth)} · Refresh token:{" "}
+                        {label(a.refreshHealth)}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[10px] text-[#89958d] lg:min-w-[330px]">
+                      <span className="flex items-center gap-1">
+                        <Clock3 size={11} /> Access expiry
+                      </span>
+                      <span>{date(a.accessTokenExpiresAt)}</span>
+                      <span>Last refreshed</span>
+                      <span>{date(a.lastRefreshedAt)}</span>
+                      <span>Last verified</span>
+                      <span>{date(a.lastVerifiedAt)}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="px-5 py-10 text-center text-xs text-[#89958d]">
+                No social accounts linked to this workspace.
+              </p>
+            )}
+          </div>
+          {attention.length > 0 && (
+            <div className="rounded-xl border border-[#eadfc7] bg-[#fffdf8] px-4 py-3">
+              <p className="text-xs font-semibold text-[#7f6431]">
+                {attention.length} account{attention.length === 1 ? " needs" : "s need"} attention
+              </p>
+              <p className="mt-1 text-[11px] leading-5 text-[#8b7955]">
+                Review affected connections before relying on them for critical campaigns. Automatic
+                refresh depends on provider adapter support.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
 }

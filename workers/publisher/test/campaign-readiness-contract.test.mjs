@@ -4,21 +4,21 @@ import { readFile } from "node:fs/promises";
 
 const api = await readFile(
   new URL("../../../src/app/api/social/campaigns/[campaignId]/readiness/route.ts", import.meta.url),
-  "utf8"
+  "utf8",
 );
 const panel = await readFile(
   new URL("../../../src/components/app/campaign-readiness-panel.tsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
 const detail = await readFile(
   new URL("../../../src/app/(protected)/app/campaigns/[campaignId]/page.tsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
 
 test("campaign readiness endpoint authenticates and scopes by active organization membership", () => {
   assert.match(api, /auth\.getUser\(\)/);
   assert.match(api, /organization_members/);
-  assert.match(api, /status","active"/);
+  assert.match(api, /status",\s*"active"/);
   assert.match(api, /organization_id/);
 });
 
