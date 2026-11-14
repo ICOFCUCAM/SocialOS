@@ -19,7 +19,13 @@ The service-role key must never be exposed to browser code or committed. See `do
 
 ## Status
 
-The authentication and first-workspace onboarding foundation is under review in pull request #2. Configure Supabase Auth email templates and redirect URLs before testing signup. This is not yet a production release.
+This is not yet a production release.
+
+The integrated stack contains authentication and workspace onboarding, multi-brand management, social account OAuth (YouTube, LinkedIn, Facebook Pages and Instagram), secure media ingestion and processing, durable publishing with account-specific content versions, campaigns, analytics collection and reporting. Configure Supabase Auth email templates and redirect URLs before testing signup.
+
+The hosted Supabase project has only the first seven migrations applied. Replay the full migration chain on a disposable database (`supabase db reset`, then `supabase/tests/*.sql`) before applying the remaining migrations to any shared environment.
+
+Background workers live in `workers/` (`publisher`, `media-processor`, `analytics-collector`); each has its own `package.json`, tests (`npm test`) and Dockerfile. Environment variables for the app and workers are listed in `.env.example`.
 
 
 ## Creator Studio architecture

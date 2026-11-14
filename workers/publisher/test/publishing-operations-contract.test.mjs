@@ -14,16 +14,21 @@ const worker = await readFile(new URL("../src/worker.mjs", import.meta.url), "ut
 
 test("publishing operations event history is tenant scoped", () => {
   assert.match(migration, /create table public\.publish_job_events/);
-  assert.match(migration, /public\.can_access_brand\(p\.brand_id,p\.organization_id\)/);
+  assert.match(migration, /private\.can_access_brand\(p\.brand_id,p\.organization_id\)/);
   assert.match(migration, /create policy publish_job_events_select_tenant/);
   assert.match(worker, /from\("publish_job_events"\)\.insert/);
 });
 
 test("workspace metrics require active membership and brand access", () => {
   assert.match(migration, /get_publishing_operations_summary/);
-  assert.match(migration, /public\.is_org_member\(p_organization_id\)/);
-  assert.match(migration, /public\.can_access_brand\(p\.brand_id,p\.organization_id\)/);
+  assert.match(migration, /private\.is_org_member\(p_organization_id\)/);
+  assert.match(migration, /private\.can_access_brand\(p\.brand_id,p\.organization_id\)/);
   assert.match(api, /get_publishing_operations_summary/);
+});
+
+test("tenant helpers are the private, active-workspace-aware versions", () => {
+  // The public.* helpers are dropped by 20261108175641_private_tenant_helpers.
+  assert.doesNotMatch(migration, /public\.(can_access_brand|has_org_role|is_org_member)\(/);
 });
 
 test("manual retry refuses ambiguous external outcomes", () => {

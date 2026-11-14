@@ -10,6 +10,10 @@ const panel = await readFile(
   new URL("../../../src/components/app/provider-health-panel.tsx", import.meta.url),
   "utf8"
 );
+const workspace = await readFile(
+  new URL("../../../src/lib/workspace.ts", import.meta.url),
+  "utf8"
+);
 const channels = await readFile(
   new URL("../../../src/app/(protected)/app/channels/page.tsx", import.meta.url),
   "utf8"
@@ -17,7 +21,10 @@ const channels = await readFile(
 
 test("provider health endpoint requires authenticated active workspace membership", () => {
   assert.match(api, /auth\.getUser\(\)/);
-  assert.match(api, /status", "active"/);
+  // Membership is resolved by the shared workspace helper, which only
+  // returns active memberships and never picks an arbitrary workspace.
+  assert.match(api, /getActiveMembership\(/);
+  assert.match(workspace, /\.eq\("status", "active"\)/);
   assert.match(api, /organization_id/);
 });
 
