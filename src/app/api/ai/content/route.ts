@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getMembershipForBrand } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,8 +53,7 @@ export async function POST(request: NextRequest) {
   if (!PLATFORMS.has(platform)) return NextResponse.json({ error: "Select a supported social platform." }, { status: 400 });
   if (!FORMATS.has(format)) return NextResponse.json({ error: "Select a supported content format." }, { status: 400 });
 
-  const { data: membership } = await supabase.from("organization_members")
-    .select("organization_id,role").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
+  const { data: membership } = await getMembershipForBrand(supabase,user.id,brandId,"organization_id,role");
   if (!membership) return NextResponse.json({ error: "Active workspace membership required." }, { status: 403 });
   if (!["owner","administrator","manager","editor","publisher"].includes(membership.role)) {
     return NextResponse.json({ error: "You do not have permission to generate brand content." }, { status: 403 });

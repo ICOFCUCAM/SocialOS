@@ -2,13 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowUpRight, Globe2, Layers3, Plus } from "lucide-react";
+import { getActiveMembership } from "@/lib/workspace";
 
 export default async function BrandsPage() {
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user) redirect("/login");
-  const {data:member}=await supabase.from("organization_members").select("organization_id,role")
-    .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  const {data:member}=await getActiveMembership(supabase,user.id,"organization_id,role");
   if(!member) redirect("/onboarding");
   const {data:brands,error}=await supabase.from("brands").select("id,name,slug,description,website_url,is_active,created_at")
     .eq("organization_id",member.organization_id).order("created_at",{ascending:false});

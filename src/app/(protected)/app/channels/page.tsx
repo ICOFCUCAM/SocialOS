@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AtSign, CheckCircle2, CircleAlert, Facebook, Globe2, Instagram, Linkedin, Pin, Plus, Video, Youtube } from "lucide-react";
 import { SocialAccountControls } from "@/components/app/social-account-controls";
 import { ProviderHealthPanel } from "@/components/app/provider-health-panel";
+import { getActiveMembership } from "@/lib/workspace";
 
 const providers = [
   {code:"instagram",name:"Instagram",group:"Meta",description:"Publish images, reels and supported media formats.",icon:Instagram,env:"META"},
@@ -54,8 +55,7 @@ export default async function ChannelsPage({searchParams}:{searchParams:Promise<
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user) redirect("/login");
-  const {data:member}=await supabase.from("organization_members").select("organization_id,role")
-    .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  const {data:member}=await getActiveMembership(supabase,user.id,"organization_id,role");
   if(!member) redirect("/onboarding");
   const [{data:accounts,error},{data:brands}] = await Promise.all([
     supabase.from("social_accounts").select("id,brand_id,account_name,account_username,connection_status,profile_image_url,platform:social_platforms(code,name)")

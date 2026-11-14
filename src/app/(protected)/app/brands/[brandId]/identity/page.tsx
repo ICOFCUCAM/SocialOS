@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { BrandIdentityForm } from "@/components/brands/brand-identity-form";
 import { ChevronLeft, Sparkles } from "lucide-react";
+import { getMembershipForBrand } from "@/lib/workspace";
 
 export default async function BrandIdentityPage({ params, searchParams }: { params: Promise<{ brandId: string }>; searchParams: Promise<{ saved?: string }> }) {
   const { brandId } = await params;
@@ -10,9 +11,8 @@ export default async function BrandIdentityPage({ params, searchParams }: { para
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: member } = await supabase.from("organization_members").select("organization_id,role")
-    .eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
-  if (!member) redirect("/onboarding");
+  const { data: member } = await getMembershipForBrand(supabase,user.id,brandId,"organization_id,role");
+  if (!member) notFound();
   const { data: brand, error } = await supabase.from("brands").select("id,name,brand_settings")
     .eq("id", brandId).eq("organization_id", member.organization_id).maybeSingle();
   if (error || !brand) notFound();

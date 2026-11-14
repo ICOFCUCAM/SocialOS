@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createSocialAdminClient } from "@/lib/social/admin";
+import { hasBrandAccess } from "@/lib/brand-permissions";
 
 export const runtime = "nodejs";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -25,6 +26,10 @@ export async function POST(request: NextRequest) {
     .select("id,organization_id,brand_id,storage_bucket,storage_object_key,mime_type,file_size_bytes,processing_status,metadata")
     .eq("id", assetId).maybeSingle();
   if (assetError || !asset) return NextResponse.json({ error: "Media asset not found." }, { status: 404 });
+  // Read access (RLS) is not enough: finalizing queues processing work.
+  if (!(await hasBrandAccess(supabase, user.id, asset.organization_id, asset.brand_id, "edit"))) {
+    return NextResponse.json({ error: "You do not have permission to manage media for this brand." }, { status: 403 });
+  }
 
   const admin = createSocialAdminClient();
   const segments = asset.storage_object_key.split("/");

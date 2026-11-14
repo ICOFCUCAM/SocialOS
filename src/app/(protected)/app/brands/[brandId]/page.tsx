@@ -4,14 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import { setBrandActive } from "@/lib/actions/brands";
 import { BrandForm } from "@/components/brands/brand-form";
 import { ChevronLeft, Globe2, Palette } from "lucide-react";
+import { getMembershipForBrand } from "@/lib/workspace";
 
 export default async function BrandDetailPage({params}:{params:Promise<{brandId:string}>}){
   const {brandId}=await params;
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user) redirect("/login");
-  const {data:member}=await supabase.from("organization_members").select("organization_id,role").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
-  if(!member) redirect("/onboarding");
+  const {data:member}=await getMembershipForBrand(supabase,user.id,brandId,"organization_id,role");
+  if(!member) notFound();
   const {data:brand,error}=await supabase.from("brands").select("id,name,slug,description,website_url,is_active,created_at")
     .eq("id",brandId).eq("organization_id",member.organization_id).maybeSingle();
   if(error||!brand) notFound();

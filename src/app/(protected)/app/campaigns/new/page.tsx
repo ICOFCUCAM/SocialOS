@@ -2,11 +2,12 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { CampaignForm } from "@/components/app/campaign-form";
+import { getActiveMembership } from "@/lib/workspace";
 
 export default async function NewCampaignPage({searchParams}:{searchParams:Promise<{brand?:string}>}){
  const {brand:requested}=await searchParams;
  const supabase=await createClient();const {data:{user}}=await supabase.auth.getUser();if(!user)redirect("/login");
- const {data:member}=await supabase.from("organization_members").select("organization_id,role").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+ const {data:member}=await getActiveMembership(supabase,user.id,"organization_id,role");
  if(!member)redirect("/onboarding");
  if(!["owner","administrator","manager","editor","publisher"].includes(member.role))redirect("/app/campaigns");
  const {data:brands,error}=await supabase.from("brands").select("id,name").eq("organization_id",member.organization_id).eq("is_active",true).order("name");

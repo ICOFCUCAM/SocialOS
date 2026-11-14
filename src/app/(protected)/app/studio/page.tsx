@@ -2,14 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AIContentStudio } from "@/components/app/ai-content-studio";
+import { getActiveMembership } from "@/lib/workspace";
 
 export default async function ContentStudioPage({searchParams}:{searchParams:Promise<{brand?:string}>}) {
   const {brand:requestedBrand}=await searchParams;
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user)redirect("/login");
-  const {data:member}=await supabase.from("organization_members").select("organization_id,role")
-    .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  const {data:member}=await getActiveMembership(supabase,user.id,"organization_id,role");
   if(!member)redirect("/onboarding");
   if(!["owner","administrator","manager","editor","publisher"].includes(member.role)) {
     return <section className="rounded-2xl border border-[#e6ece6] bg-white p-8"><h1 className="text-xl font-semibold">AI Content Studio</h1><p className="mt-2 text-sm text-[#89958d]">Your workspace role does not include content creation permissions.</p></section>;

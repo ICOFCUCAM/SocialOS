@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft, ArrowRight, CalendarDays, Plus } from "lucide-react";
 import { PublishReadinessCheck } from "@/components/app/publish-readiness-check";
+import { getActiveMembership } from "@/lib/workspace";
 
 type Post={id:string;title:string|null;body:string;status:string;scheduled_at:string|null;published_at:string|null;created_at:string;brand_id:string};
 function monthLabel(date:Date){return new Intl.DateTimeFormat(undefined,{month:"long",year:"numeric"}).format(date);}
@@ -22,8 +23,7 @@ export default async function CalendarPage({searchParams}:{searchParams:Promise<
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user)redirect("/login");
-  const {data:member}=await supabase.from("organization_members").select("organization_id")
-    .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  const {data:member}=await getActiveMembership(supabase,user.id,"organization_id");
   if(!member)redirect("/onboarding");
   const [{data:posts,error},{data:brands}] = await Promise.all([
     supabase.from("social_posts").select("id,title,body,status,scheduled_at,published_at,created_at,brand_id")

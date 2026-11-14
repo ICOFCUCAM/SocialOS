@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createSocialAdminClient } from "@/lib/social/admin";
+import { hasBrandAccess } from "@/lib/brand-permissions";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
   const { data: brand } = await supabase.from("brands").select("id")
     .eq("id", brandId).eq("organization_id", organizationId).eq("is_active", true).maybeSingle();
   if (!brand) return NextResponse.json({ error: "Active brand not found." }, { status: 404 });
+  if (!(await hasBrandAccess(supabase, user.id, organizationId, brandId, "edit"))) {
+    return NextResponse.json({ error: "You do not have permission to upload media to this brand." }, { status: 403 });
+  }
 
   const assetId = randomUUID();
   const safeExtension = filename.includes(".") ? filename.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10) : "";

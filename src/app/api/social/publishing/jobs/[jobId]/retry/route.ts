@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createSocialAdminClient } from "@/lib/social/admin";
+import { hasBrandAccess } from "@/lib/brand-permissions";
 
 type Context={params:Promise<{jobId:string}>};
 const allowedRoles=["owner","administrator","manager","publisher"];
@@ -14,7 +15,7 @@ export async function POST(_request:NextRequest,{params}:Context) {
   // Find the job through tenant RLS before checking the user's role. A user may
   // belong to several organizations; never select an arbitrary membership.
   const {data:job}=await supabase.from("publish_jobs")
-    .select("id,organization_id").eq("id",jobId).maybeSingle();
+    .select("id,organization_id,post_id").eq("id",jobId).maybeSingle();
   if(!job) return NextResponse.json({error:"Publishing job not found."},{status:404});
 
   const {data:membership}=await supabase.from("organization_members")
@@ -22,6 +23,11 @@ export async function POST(_request:NextRequest,{params}:Context) {
     .eq("organization_id",job.organization_id).eq("user_id",user.id).eq("status","active").maybeSingle();
   if(!membership || !allowedRoles.includes(membership.role)) {
     return NextResponse.json({error:"Publishing manager permission required."},{status:403});
+  }
+  const {data:post}=await supabase.from("social_posts").select("brand_id")
+    .eq("id",job.post_id).eq("organization_id",job.organization_id).maybeSingle();
+  if(!post || !(await hasBrandAccess(supabase,user.id,job.organization_id,post.brand_id,"publish"))) {
+    return NextResponse.json({error:"Publishing permission for this brand is required."},{status:403});
   }
 
   const admin=createSocialAdminClient();

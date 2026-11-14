@@ -1,19 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createSocialAdminClient } from "@/lib/social/admin";
+import { getActiveMembership } from "@/lib/workspace";
 
 export async function GET() {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("organization_members")
-    .select("organization_id,role")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .limit(1)
-    .maybeSingle();
+  const { data: membership, error: membershipError } = await getActiveMembership(supabase,user.id,"organization_id,role");
   if (membershipError || !membership) return NextResponse.json({ error: "Active workspace membership required." }, { status: 403 });
 
   const { data: accounts, error: accountsError } = await supabase

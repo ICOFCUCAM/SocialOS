@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowDownRight, ArrowUpRight, FileDown, FileSpreadsheet, ShieldCheck } from "lucide-react";
 import { PrintReportButton } from "@/components/app/print-report-button";
+import { getActiveMembership } from "@/lib/workspace";
 
 type MetricRow = { target_id: string; metric_date: string; impressions: number | null; reach: number | null; engagements: number | null; clicks: number | null };
 type AccountRow = { id: string; platform_id: string };
@@ -29,8 +30,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: member } = await supabase.from("organization_members").select("organization_id")
-    .eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
+  const { data: member } = await getActiveMembership(supabase,user.id,"organization_id");
   if (!member) redirect("/onboarding");
 
   const today = iso(new Date());

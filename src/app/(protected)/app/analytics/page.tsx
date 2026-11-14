@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { BarChart3 } from "lucide-react";
+import { getActiveMembership } from "@/lib/workspace";
 
 type MetricRow = {
   target_id: string;
@@ -34,8 +35,7 @@ export default async function AnalyticsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: member } = await supabase.from("organization_members")
-    .select("organization_id").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
+  const { data: member } = await getActiveMembership(supabase,user.id,"organization_id");
   if (!member) redirect("/onboarding");
 
   const { data: campaigns, error } = await supabase.from("social_campaigns")

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createOAuthState, createPkceChallenge, createPkceVerifier, getProvider, oauthRedirectUri, type Provider } from "@/lib/social/oauth";
+import { getMembershipForBrand } from "@/lib/workspace";
 
 export async function GET(request:NextRequest,{params}:{params:Promise<{provider:string}>}) {
   const {provider:providerName}=await params;
@@ -10,12 +11,11 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{provider
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(new URL("/login",request.url));
-  const {data:member}=await supabase.from("organization_members").select("organization_id,role")
-    .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
-  if (!member) return NextResponse.redirect(new URL("/onboarding",request.url));
-  if (!["owner","administrator","manager"].includes(member.role)) return NextResponse.json({error:"Only workspace managers can connect social accounts."},{status:403});
   const brandId=request.nextUrl.searchParams.get("brandId");
   if (!brandId) return NextResponse.json({error:"A brandId is required."},{status:400});
+  const {data:member}=await getMembershipForBrand(supabase,user.id,brandId,"organization_id,role");
+  if (!member) return NextResponse.json({error:"Brand not found or not accessible."},{status:404});
+  if (!["owner","administrator","manager"].includes(member.role)) return NextResponse.json({error:"Only workspace managers can connect social accounts."},{status:403});
   const {data:brand}=await supabase.from("brands").select("id")
     .eq("id",brandId).eq("organization_id",member.organization_id).eq("is_active",true).maybeSingle();
   if (!brand) return NextResponse.json({error:"Brand not found or inactive."},{status:404});

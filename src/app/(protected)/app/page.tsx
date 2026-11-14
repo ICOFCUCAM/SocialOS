@@ -2,14 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowUpRight, CalendarDays, CheckCircle2, CirclePlus, Clock3, Instagram, Layers3, Sparkles, Youtube } from "lucide-react";
+import { getActiveMembership } from "@/lib/workspace";
 
 export default async function Page(){
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user) redirect("/login");
-  const {data:membership}=await supabase.from("organization_members")
-    .select("organization_id,organizations(name)")
-    .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  const {data:membership}=await getActiveMembership(supabase,user.id,"organization_id,organizations(name)");
   if(!membership) redirect("/onboarding");
   const org=membership.organizations as unknown as {name:string}|null;
   const [{count:brandCount},{count:channelCount},{data:brand}] = await Promise.all([

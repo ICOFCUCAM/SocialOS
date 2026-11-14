@@ -2,13 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Megaphone, Plus, Target } from "lucide-react";
+import { getActiveMembership } from "@/lib/workspace";
 
 const tone=(status:string)=>status==="active"?"bg-[#edf5ef] text-[#176b4b]":status==="completed"?"bg-[#f1f2f0] text-[#667269]":status==="paused"?"bg-[#faf5e8] text-[#8a6a28]":"bg-[#f1f4f1] text-[#718076]";
 
 export default async function CampaignsPage(){
  const supabase=await createClient();
  const {data:{user}}=await supabase.auth.getUser();if(!user)redirect("/login");
- const {data:member}=await supabase.from("organization_members").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+ const {data:member}=await getActiveMembership(supabase,user.id,"organization_id");
  if(!member)redirect("/onboarding");
  const [{data:campaigns,error},{data:brands}]=await Promise.all([
   supabase.from("social_campaigns").select("id,name,description,objective,status,start_date,end_date,channels,brand_id,created_at,social_campaign_posts(count)")

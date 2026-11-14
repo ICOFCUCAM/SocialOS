@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveMembership, getMembershipForBrand } from "@/lib/workspace";
 
 function clean(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -19,14 +20,16 @@ function safeWebsite(value: string) {
     return url.toString();
   } catch { return null; }
 }
-async function currentWorkspace() {
+async function currentWorkspace(brandId?: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: member, error } = await supabase.from("organization_members")
-    .select("organization_id,role")
-    .eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
-  if (error || !member) redirect("/onboarding");
+  const { data: member, error } = await (brandId ? getMembershipForBrand(supabase, user.id, brandId, "organization_id,role") : getActiveMembership(supabase, user.id, "organization_id,role"));
+  if (error) throw new Error("Unable to verify workspace membership.");
+  if (!member) {
+    if (brandId) throw new Error("Brand not found or not accessible.");
+    redirect("/onboarding");
+  }
   if (!["owner", "administrator", "manager"].includes(member.role)) {
     throw new Error("You do not have permission to manage brands.");
   }
@@ -67,7 +70,7 @@ export async function updateBrand(brandId: string, formData: FormData) {
   if (slug.length < 2) throw new Error("Please provide a valid brand address.");
   if (websiteRaw && !safeWebsite(websiteRaw)) throw new Error("Website must be a valid http or https address.");
 
-  const { supabase, organizationId } = await currentWorkspace();
+  const { supabase, organizationId } = await currentWorkspace(brandId);
   const { error } = await supabase.from("brands").update({
     name, slug, description: description || null, website_url: safeWebsite(websiteRaw)
   }).eq("id", brandId).eq("organization_id", organizationId);
@@ -79,7 +82,7 @@ export async function updateBrand(brandId: string, formData: FormData) {
 }
 
 export async function setBrandActive(brandId: string, active: boolean) {
-  const { supabase, organizationId } = await currentWorkspace();
+  const { supabase, organizationId } = await currentWorkspace(brandId);
   const { error } = await supabase.from("brands").update({ is_active: active })
     .eq("id", brandId).eq("organization_id", organizationId);
   if (error) throw new Error(error.message);

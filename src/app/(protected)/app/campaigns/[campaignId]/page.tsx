@@ -5,11 +5,14 @@ import { CampaignForm } from "@/components/app/campaign-form";
 import { CampaignPostManager } from "@/components/app/campaign-post-manager";
 import { CalendarDays, Megaphone, Target } from "lucide-react";
 import { CampaignReadinessPanel } from "@/components/app/campaign-readiness-panel";
+import { getMembershipForOrganization } from "@/lib/workspace";
 
 export default async function CampaignDetailPage({params}:{params:Promise<{campaignId:string}>}){
  const {campaignId}=await params;const supabase=await createClient();
  const {data:{user}}=await supabase.auth.getUser();if(!user)redirect("/login");
- const {data:member}=await supabase.from("organization_members").select("organization_id,role").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+ const {data:owner}=await supabase.from("social_campaigns").select("organization_id").eq("id",campaignId).maybeSingle();
+ if(!owner)notFound();
+ const {data:member}=await getMembershipForOrganization(supabase,user.id,owner.organization_id as string,"organization_id,role");
  if(!member)redirect("/onboarding");
  const [{data:campaign,error},{data:links},{data:posts}]=await Promise.all([
   supabase.from("social_campaigns").select("*").eq("id",campaignId).eq("organization_id",member.organization_id).maybeSingle(),

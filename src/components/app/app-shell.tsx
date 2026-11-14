@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
+import { switchWorkspace } from "@/lib/actions/workspace";
 import {
   Activity, BarChart3, CalendarDays, ChevronDown, CircleHelp, Command, FileSpreadsheet,
   FolderKanban, LayoutDashboard, Megaphone, MessageSquare, Radio,
@@ -28,7 +29,7 @@ const workspace: {label:string;icon:LucideIcon}[] = [
   {label:"Activity log",icon:Activity},
 ];
 
-export function AppShell({children,email,workspaceName,brandName}:{children:React.ReactNode;email:string;workspaceName:string;brandName:string}) {
+export function AppShell({children,email,workspaceName,brandName,workspaceId,workspaces=[]}:{children:React.ReactNode;email:string;workspaceName:string;brandName:string;workspaceId?:string;workspaces?:{id:string;name:string}[]}) {
   const pathname=usePathname();
   return <div className="min-h-screen bg-[#f6f8f5] text-[#1b2821]">
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[252px] flex-col border-r border-[#e7ece7] bg-white lg:flex">
@@ -38,11 +39,21 @@ export function AppShell({children,email,workspaceName,brandName}:{children:Reac
         <span className="ml-auto rounded-md border border-[#e8ede8] px-1.5 py-1 text-[9px] font-semibold tracking-wider text-[#87938b]">STUDIO</span>
       </div>
       <div className="border-b border-[#edf0ed] p-4">
-        <button className="flex w-full items-center gap-3 rounded-xl border border-[#e9eee9] p-3 text-left hover:bg-[#f8faf8]">
+        <div className="relative flex w-full items-center gap-3 rounded-xl border border-[#e9eee9] p-3 text-left hover:bg-[#f8faf8]">
           <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#eaf3ed] text-sm font-semibold text-[#176b4b]">{workspaceName.slice(0,1).toUpperCase()}</span>
           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{workspaceName}</span><span className="mt-0.5 block text-[11px] text-[#89948d]">Workspace</span></span>
-          <ChevronDown size={15} className="text-[#89948d]"/>
-        </button>
+          {workspaces.length > 1 && <>
+            <ChevronDown size={15} className="text-[#89948d]"/>
+            <form action={switchWorkspace} className="absolute inset-0">
+              <label className="sr-only" htmlFor="workspace-switcher">Switch workspace</label>
+              <select id="workspace-switcher" name="organizationId" defaultValue={workspaceId}
+                onChange={event => event.currentTarget.form?.requestSubmit()}
+                className="h-full w-full cursor-pointer opacity-0">
+                {workspaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </form>
+          </>}
+        </div>
         <button className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-[#f8faf8]">
           <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#f0f2ef] text-xs font-semibold text-[#657269]">{brandName.slice(0,1).toUpperCase()}</span>
           <span className="min-w-0 flex-1 truncate text-[#59675e]">{brandName}</span><ChevronDown size={14} className="text-[#9aa49d}"/>

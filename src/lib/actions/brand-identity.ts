@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getMembershipForBrand } from "@/lib/workspace";
 
 const value = (v: FormDataEntryValue | null) => typeof v === "string" ? v.trim() : "";
 const list = (v: string) => [...new Set(v.split(/\r?\n/).map(x => x.trim()).filter(Boolean))].slice(0, 20);
@@ -18,9 +19,7 @@ export async function updateBrandIdentity(brandId: string, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: member } = await supabase.from("organization_members")
-    .select("organization_id, role").eq("user_id", user.id)
-    .eq("status", "active").limit(1).maybeSingle();
+  const { data: member } = await getMembershipForBrand(supabase, user.id, brandId, "organization_id, role");
   if (!member) redirect("/onboarding");
   if (!["owner", "administrator", "manager"].includes(member.role)) {
     throw new Error("You do not have permission to edit brand identity.");

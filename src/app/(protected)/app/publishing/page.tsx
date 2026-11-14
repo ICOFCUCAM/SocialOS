@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PublishingJobRetry } from "@/components/app/publishing-job-retry";
 import { PublishingJobReconcile } from "@/components/app/publishing-job-reconcile";
 import { Activity, AlertTriangle, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, Radio, Send } from "lucide-react";
+import { getActiveMembership } from "@/lib/workspace";
 
 type SearchParams=Promise<{view?:string}>;
 const views=["all","queued","published","failed"] as const;
@@ -27,8 +28,7 @@ export default async function PublishingPage({searchParams}:{searchParams:Search
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user) redirect("/login");
-  const {data:member}=await supabase.from("organization_members").select("organization_id,role")
-    .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  const {data:member}=await getActiveMembership(supabase,user.id,"organization_id,role");
   if(!member) redirect("/onboarding");
 
   const monthStart=new Date();

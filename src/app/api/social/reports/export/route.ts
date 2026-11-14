@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveMembership } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +17,7 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
-  const { data: membership } = await supabase.from("organization_members")
-    .select("organization_id").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
+  const { data: membership } = await getActiveMembership(supabase,user.id,"organization_id");
   if (!membership) return NextResponse.json({ error: "An active workspace is required." }, { status: 403 });
 
   const now = new Date();

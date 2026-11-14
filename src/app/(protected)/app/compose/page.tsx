@@ -3,14 +3,14 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SocialPostComposer } from "@/components/app/social-post-composer";
 import { getPlatformCapability } from "@/lib/social/capabilities";
+import { getActiveMembership } from "@/lib/workspace";
 
 export default async function ComposePage({searchParams}:{searchParams:Promise<{brand?:string}>}) {
   const {brand:requestedBrand}=await searchParams;
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user) redirect("/login");
-  const {data:member}=await supabase.from("organization_members").select("organization_id,role")
-    .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  const {data:member}=await getActiveMembership(supabase,user.id,"organization_id,role");
   if(!member) redirect("/onboarding");
   const [{data:brands,error:brandError},{data:accounts,error:accountError},{data:assets,error:assetError}] = await Promise.all([
     supabase.from("brands").select("id,name").eq("organization_id",member.organization_id).eq("is_active",true).order("name"),
