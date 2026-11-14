@@ -50,3 +50,11 @@ test("cooldown duration is bounded to six hours", async () => {
   await limiter.defer({ platform: "linkedin", appId: "li-app", accountId: "li-account" }, 24 * 60 * 60 * 1000, 1000);
   assert.equal(await limiter.waitTimeMs({ platform: "linkedin", appId: "li-app", accountId: "li-account" }, 1000), 6 * 60 * 60 * 1000);
 });
+
+test("an explicit application quota scope applies a Meta cooldown app-wide", async () => {
+  const redis = fakeRedis();
+  const limiter = createProviderRateLimiter({ redis });
+  const scope = { platform: "instagram", appId: "meta-app-1", accountId: "account-1" };
+  await limiter.defer(scope, 30000, 1000, "application");
+  assert.equal(await limiter.waitTimeMs({ ...scope, accountId: "account-2" }, 1000), 30000);
+});

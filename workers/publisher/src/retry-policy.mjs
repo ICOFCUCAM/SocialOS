@@ -14,7 +14,8 @@ export function computeRetryDelay({ attemptCount, retryAfterMs = null, random = 
   const base = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * (2 ** (attempt - 1)));
   const randomValue = random();
   const sample = Number.isFinite(randomValue) ? Math.min(1, Math.max(0, randomValue)) : 0.5;
-  return Math.round(base * (0.8 + sample * 0.4));
+  // Cap after jitter so the documented one-hour ceiling actually holds.
+  return Math.min(MAX_BACKOFF_MS, Math.round(base * (0.8 + sample * 0.4)));
 }
 
 /**

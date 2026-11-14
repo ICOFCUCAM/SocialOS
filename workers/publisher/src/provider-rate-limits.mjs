@@ -24,16 +24,32 @@ end
 return 1
 `;
 
+// YouTube Data API quota is allocated per Google Cloud project, so an unscoped
+// throttle there is treated as application-wide. Meta and LinkedIn throttle
+// mostly per account/member unless the provider says otherwise.
+const APP_WIDE_DEFAULT_PLATFORMS = new Set(["youtube"]);
+
 function safePart(value) {
   return String(value || "default").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
 }
 
 export function createProviderRateLimiter({ redis, keyPrefix = "socialos:provider-rate-limit" }) {
   if (!redis) throw new Error("A Redis client is required.");
-  const keysFor = ({ platform, accountId, appId = "default", businessId = null }) => {
-    const root = keyPrefix + ":" + safePart(platform);
-    const keys = [root + ":app:" + safePart(appId), root + ":account:" + safePart(accountId)];
-    if (businessId) keys.push(root + ":business:" + safePart(businessId));
+  const root = scope => keyPrefix + ":" + safePart(scope.platform);
+  const appKey = scope => root(scope) + ":app:" + safePart(scope.appId || "default");
+  const accountKey = scope => root(scope) + ":account:" + safePart(scope.accountId);
+  const businessKey = scope => root(scope) + ":business:" + safePart(scope.businessId);
+  // Every applicable bucket is checked before a request is sent.
+  const keysFor = scope => [appKey(scope), accountKey(scope), ...(scope.businessId ? [businessKey(scope)] : [])];
+  // A cooldown is written only to the bucket the provider actually throttled, so
+  // one account's throttle does not pause every other customer on the same app.
+  const cooldownKeysFor = (scope, quotaScope) => {
+    const scopes = Array.isArray(quotaScope) ? quotaScope : quotaScope ? [quotaScope] : [];
+    const keys = [accountKey(scope)];
+    const appWide = scopes.some(item => item === "application" || item === "application_daily") ||
+      (scopes.length === 0 && APP_WIDE_DEFAULT_PLATFORMS.has(scope.platform));
+    if (appWide) keys.push(appKey(scope));
+    if (scope.businessId) keys.push(businessKey(scope));
     return keys;
   };
   return Object.freeze({
@@ -42,11 +58,11 @@ export function createProviderRateLimiter({ redis, keyPrefix = "socialos:provide
       const wait = Number(await redis.eval(ACQUIRE_SCRIPT, keys.length, ...keys, now, 6 * 60 * 60 * 1000));
       return Number.isFinite(wait) ? Math.max(0, wait) : 0;
     },
-    async defer(scope, retryAfterMs, now = Date.now()) {
+    async defer(scope, retryAfterMs, now = Date.now(), quotaScope = scope.quotaScope ?? null) {
       if (!Number.isFinite(retryAfterMs) || retryAfterMs <= 0) return;
       const bounded = Math.min(6 * 60 * 60 * 1000, Math.max(1000, retryAfterMs));
       const untilAt = now + bounded;
-      const keys = keysFor(scope);
+      const keys = cooldownKeysFor(scope, quotaScope);
       await redis.eval(COOLDOWN_SCRIPT, keys.length, ...keys, untilAt, bounded);
     }
   });
