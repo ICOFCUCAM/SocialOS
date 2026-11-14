@@ -4,15 +4,15 @@ import { readFile } from "node:fs/promises";
 
 const page = await readFile(
   new URL("../../../src/app/(protected)/app/publishing/page.tsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
 const retry = await readFile(
   new URL("../../../src/components/app/publishing-job-retry.tsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
 const reconcile = await readFile(
   new URL("../../../src/components/app/publishing-job-reconcile.tsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
 
 test("publishing centre displays live operational metrics and event history", () => {
@@ -25,14 +25,14 @@ test("publishing centre displays live operational metrics and event history", ()
 
 test("dashboard routes known-failure retry through guarded operations action", () => {
   assert.match(page, /PublishingJobRetry/);
-  assert.match(retry, /action:"retry"/);
+  assert.match(retry, /action:\s*"retry"/);
   assert.match(retry, /api\/social\/publishing\/operations/);
 });
 
 test("dashboard exposes a separate verified-ID reconciliation workflow", () => {
   assert.match(page, /PublishingJobReconcile/);
-  assert.match(page, /unknown&&canRetry/);
-  assert.match(reconcile, /action:"reconcile_published"/);
+  assert.match(page, /unknown\s*&&\s*canRetry/);
+  assert.match(reconcile, /action:\s*"reconcile_published"/);
   assert.match(reconcile, /externalPostId/);
   assert.match(reconcile, /Only use this action after locating the published post/);
 });

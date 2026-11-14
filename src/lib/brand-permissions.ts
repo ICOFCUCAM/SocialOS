@@ -14,16 +14,30 @@ const BRAND_PUBLISHERS = ["manager", "publisher"];
  * a publishing role in the workspace or on the brand.
  */
 export async function hasBrandAccess(
-  supabase: Supabase, userId: string, organizationId: string, brandId: string, mode: "edit" | "publish"
+  supabase: Supabase,
+  userId: string,
+  organizationId: string,
+  brandId: string,
+  mode: "edit" | "publish",
 ): Promise<boolean> {
-  const { data: member } = await supabase.from("organization_members").select("role")
-    .eq("organization_id", organizationId).eq("user_id", userId).eq("status", "active").maybeSingle();
+  const { data: member } = await supabase
+    .from("organization_members")
+    .select("role")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
   const orgRole = member?.role as string | undefined;
   if (!orgRole) return false;
   if (WORKSPACE_BRAND_ADMINS.includes(orgRole)) return true;
   if (!WORKSPACE_CONTRIBUTORS.includes(orgRole)) return false;
-  const { data: brandMember } = await supabase.from("brand_members").select("role")
-    .eq("organization_id", organizationId).eq("brand_id", brandId).eq("user_id", userId).maybeSingle();
+  const { data: brandMember } = await supabase
+    .from("brand_members")
+    .select("role")
+    .eq("organization_id", organizationId)
+    .eq("brand_id", brandId)
+    .eq("user_id", userId)
+    .maybeSingle();
   const brandRole = brandMember?.role as string | undefined;
   if (!brandRole || !BRAND_CONTRIBUTORS.includes(brandRole)) return false;
   return mode === "edit" || orgRole === "publisher" || BRAND_PUBLISHERS.includes(brandRole);

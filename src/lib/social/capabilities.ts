@@ -22,7 +22,7 @@ const CAPABILITIES: Record<string, PlatformCapability> = {
     supportedMedia: ["image", "video"],
     maxMediaItems: 1,
     textOnly: false,
-    limitation: "One image or one video per post; multi-photo posts are not enabled."
+    limitation: "One image or one video per post; multi-photo posts are not enabled.",
   },
   instagram: {
     platform: "instagram",
@@ -30,7 +30,7 @@ const CAPABILITIES: Record<string, PlatformCapability> = {
     supportedMedia: ["image", "video"],
     maxMediaItems: 1,
     textOnly: false,
-    limitation: "One image or one video/Reel per post."
+    limitation: "One image or one video/Reel per post.",
   },
   youtube: {
     platform: "youtube",
@@ -38,7 +38,7 @@ const CAPABILITIES: Record<string, PlatformCapability> = {
     supportedMedia: ["video"],
     maxMediaItems: 1,
     textOnly: false,
-    limitation: "One prepared video is required."
+    limitation: "One prepared video is required.",
   },
   linkedin: {
     platform: "linkedin",
@@ -46,7 +46,8 @@ const CAPABILITIES: Record<string, PlatformCapability> = {
     supportedMedia: [],
     maxMediaItems: 0,
     textOnly: true,
-    limitation: "The current adapter supports text-only publishing; media uploads are not implemented."
+    limitation:
+      "The current adapter supports text-only publishing; media uploads are not implemented.",
   },
   tiktok: {
     platform: "tiktok",
@@ -54,7 +55,7 @@ const CAPABILITIES: Record<string, PlatformCapability> = {
     supportedMedia: [],
     maxMediaItems: 0,
     textOnly: false,
-    limitation: "A publishing adapter is not implemented yet."
+    limitation: "A publishing adapter is not implemented yet.",
   },
   threads: {
     platform: "threads",
@@ -62,7 +63,7 @@ const CAPABILITIES: Record<string, PlatformCapability> = {
     supportedMedia: [],
     maxMediaItems: 0,
     textOnly: false,
-    limitation: "A publishing adapter is not implemented yet."
+    limitation: "A publishing adapter is not implemented yet.",
   },
   pinterest: {
     platform: "pinterest",
@@ -70,7 +71,7 @@ const CAPABILITIES: Record<string, PlatformCapability> = {
     supportedMedia: [],
     maxMediaItems: 0,
     textOnly: false,
-    limitation: "A publishing adapter is not implemented yet."
+    limitation: "A publishing adapter is not implemented yet.",
   },
   x: {
     platform: "x",
@@ -78,18 +79,20 @@ const CAPABILITIES: Record<string, PlatformCapability> = {
     supportedMedia: [],
     maxMediaItems: 0,
     textOnly: false,
-    limitation: "A publishing adapter is not implemented yet."
-  }
+    limitation: "A publishing adapter is not implemented yet.",
+  },
 };
 
 export function getPlatformCapability(platformCode: string | null | undefined): PlatformCapability {
   const code = (platformCode || "").toLowerCase();
-  return CAPABILITIES[code] ?? {
-    platform: code || "unknown",
-    publishingEnabled: false,
-    supportedMedia: [],
-    maxMediaItems: 0,
-    textOnly: false,
-    limitation: "No verified publishing capability is registered for this platform."
-  };
+  return (
+    CAPABILITIES[code] ?? {
+      platform: code || "unknown",
+      publishingEnabled: false,
+      supportedMedia: [],
+      maxMediaItems: 0,
+      textOnly: false,
+      limitation: "No verified publishing capability is registered for this platform.",
+    }
+  );
 }

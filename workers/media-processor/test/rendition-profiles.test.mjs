@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveRenditionProfiles, IMAGE_PROFILES, VIDEO_PROFILES } from "../src/rendition-profiles.mjs";
+import {
+  resolveRenditionProfiles,
+  IMAGE_PROFILES,
+  VIDEO_PROFILES,
+} from "../src/rendition-profiles.mjs";
 
 test("maps selected platforms to deduplicated output profiles", () => {
   const result = resolveRenditionProfiles(["instagram", "facebook", "youtube", "pinterest"]);

@@ -2,7 +2,10 @@ import { providerFetch, providerJson, PublishError, requireScopes } from "../err
 
 const graph = () => {
   const version = process.env.META_GRAPH_API_VERSION;
-  if (!version || !/^v\d+\.\d+$/.test(version)) throw new PublishError("META_GRAPH_API_VERSION must be explicitly configured.", { code: "PROVIDER_NOT_CONFIGURED" });
+  if (!version || !/^v\d+\.\d+$/.test(version))
+    throw new PublishError("META_GRAPH_API_VERSION must be explicitly configured.", {
+      code: "PROVIDER_NOT_CONFIGURED",
+    });
   return "https://graph.facebook.com/" + version;
 };
 
@@ -21,19 +24,46 @@ export async function publishFacebookPage({ account, token, post, media = [] }) 
     endpoint += first.kind === "video" ? "/videos" : "/photos";
     if (first.kind === "video") params.set("file_url", first.signedUrl);
   }
-  if (media.length > 1) throw new PublishError("Facebook multi-photo publishing is not enabled in this adapter yet.", { code: "UNSUPPORTED_MEDIA_SET" });
-  const response = await providerFetch(endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params, signal: AbortSignal.timeout(120000) }, "Facebook", { ambiguous: true });
+  if (media.length > 1)
+    throw new PublishError("Facebook multi-photo publishing is not enabled in this adapter yet.", {
+      code: "UNSUPPORTED_MEDIA_SET",
+    });
+  const response = await providerFetch(
+    endpoint,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params,
+      signal: AbortSignal.timeout(120000),
+    },
+    "Facebook",
+    { ambiguous: true },
+  );
   const result = await providerJson(response, "Facebook");
-  if (!result.id) throw new PublishError("Facebook did not return a publication ID.", { code: "PROVIDER_RESPONSE_INVALID", ambiguous: true });
+  if (!result.id)
+    throw new PublishError("Facebook did not return a publication ID.", {
+      code: "PROVIDER_RESPONSE_INVALID",
+      ambiguous: true,
+    });
   return { externalPostId: String(result.id), permalink: null };
 }
 
 export async function publishInstagram({ account, token, post, media = [] }) {
-  requireScopes(account.granted_scopes, ["instagram_basic", "instagram_content_publish"], "Instagram");
-  if (media.length !== 1) throw new PublishError("Instagram publishing currently requires exactly one media item.", { code: "UNSUPPORTED_MEDIA_SET" });
+  requireScopes(
+    account.granted_scopes,
+    ["instagram_basic", "instagram_content_publish"],
+    "Instagram",
+  );
+  if (media.length !== 1)
+    throw new PublishError("Instagram publishing currently requires exactly one media item.", {
+      code: "UNSUPPORTED_MEDIA_SET",
+    });
   const base = graph();
   const item = media[0];
-  if (!item.signedUrl) throw new PublishError("Instagram requires a temporary fetchable media URL.", { code: "MEDIA_URL_REQUIRED" });
+  if (!item.signedUrl)
+    throw new PublishError("Instagram requires a temporary fetchable media URL.", {
+      code: "MEDIA_URL_REQUIRED",
+    });
   const containerParams = new URLSearchParams({ access_token: token, caption: post.body || "" });
   if (item.kind === "video") {
     containerParams.set("media_type", "REELS");
@@ -41,11 +71,20 @@ export async function publishInstagram({ account, token, post, media = [] }) {
   } else {
     containerParams.set("image_url", item.signedUrl);
   }
-  const create = await fetch(base + "/" + encodeURIComponent(account.external_account_id) + "/media", {
-    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: containerParams, signal: AbortSignal.timeout(60000)
-  });
+  const create = await fetch(
+    base + "/" + encodeURIComponent(account.external_account_id) + "/media",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: containerParams,
+      signal: AbortSignal.timeout(60000),
+    },
+  );
   const container = await providerJson(create, "Instagram");
-  if (!container.id) throw new PublishError("Instagram did not return a media container ID.", { code: "PROVIDER_RESPONSE_INVALID" });
+  if (!container.id)
+    throw new PublishError("Instagram did not return a media container ID.", {
+      code: "PROVIDER_RESPONSE_INVALID",
+    });
 
   if (item.kind === "video") {
     let ready = false;
@@ -53,50 +92,96 @@ export async function publishInstagram({ account, token, post, media = [] }) {
       const statusUrl = new URL(base + "/" + encodeURIComponent(container.id));
       statusUrl.searchParams.set("fields", "status_code");
       statusUrl.searchParams.set("access_token", token);
-      const status = await providerJson(await fetch(statusUrl, { signal: AbortSignal.timeout(15000) }), "Instagram");
-      if (status.status_code === "FINISHED") { ready = true; break; }
-      if (status.status_code === "ERROR" || status.status_code === "EXPIRED") {
-        throw new PublishError("Instagram media container processing failed.", { code: "MEDIA_CONTAINER_FAILED" });
+      const status = await providerJson(
+        await fetch(statusUrl, { signal: AbortSignal.timeout(15000) }),
+        "Instagram",
+      );
+      if (status.status_code === "FINISHED") {
+        ready = true;
+        break;
       }
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      if (status.status_code === "ERROR" || status.status_code === "EXPIRED") {
+        throw new PublishError("Instagram media container processing failed.", {
+          code: "MEDIA_CONTAINER_FAILED",
+        });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
-    if (!ready) throw new PublishError("Instagram media container is still processing; publication was not attempted.", { code: "MEDIA_CONTAINER_PENDING", retryable: true });
+    if (!ready)
+      throw new PublishError(
+        "Instagram media container is still processing; publication was not attempted.",
+        { code: "MEDIA_CONTAINER_PENDING", retryable: true },
+      );
   }
   const publishParams = new URLSearchParams({ creation_id: container.id, access_token: token });
-  const publish = await providerFetch(base + "/" + encodeURIComponent(account.external_account_id) + "/media_publish", {
-    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: publishParams, signal: AbortSignal.timeout(60000)
-  }, "Instagram", { ambiguous: true });
+  const publish = await providerFetch(
+    base + "/" + encodeURIComponent(account.external_account_id) + "/media_publish",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: publishParams,
+      signal: AbortSignal.timeout(60000),
+    },
+    "Instagram",
+    { ambiguous: true },
+  );
   const result = await providerJson(publish, "Instagram");
-  if (!result.id) throw new PublishError("Instagram did not return a publication ID.", { code: "PROVIDER_RESPONSE_INVALID", ambiguous: true });
+  if (!result.id)
+    throw new PublishError("Instagram did not return a publication ID.", {
+      code: "PROVIDER_RESPONSE_INVALID",
+      ambiguous: true,
+    });
   return { externalPostId: String(result.id), permalink: null };
 }
 
 // Asynchronous Instagram Reels lifecycle. The caller persists the returned
 // container ID before scheduling another worker action.
 export async function submitInstagramVideoContainer({ account, token, post, media }) {
-  requireScopes(account.granted_scopes, ["instagram_basic", "instagram_content_publish"], "Instagram");
-  if (!Array.isArray(media) || media.length !== 1 || media[0]?.kind !== "video" || !media[0]?.signedUrl) {
-    throw new PublishError("Instagram asynchronous publishing requires one prepared video and a fetchable media URL.", { code: "INVALID_PUBLISH_INPUT" });
+  requireScopes(
+    account.granted_scopes,
+    ["instagram_basic", "instagram_content_publish"],
+    "Instagram",
+  );
+  if (
+    !Array.isArray(media) ||
+    media.length !== 1 ||
+    media[0]?.kind !== "video" ||
+    !media[0]?.signedUrl
+  ) {
+    throw new PublishError(
+      "Instagram asynchronous publishing requires one prepared video and a fetchable media URL.",
+      { code: "INVALID_PUBLISH_INPUT" },
+    );
   }
   const params = new URLSearchParams({
     access_token: token,
     caption: post.body || "",
     media_type: "REELS",
-    video_url: media[0].signedUrl
+    video_url: media[0].signedUrl,
   });
-  const response = await fetch(graph() + "/" + encodeURIComponent(account.external_account_id) + "/media", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params,
-    signal: AbortSignal.timeout(60000)
-  });
+  const response = await fetch(
+    graph() + "/" + encodeURIComponent(account.external_account_id) + "/media",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params,
+      signal: AbortSignal.timeout(60000),
+    },
+  );
   const result = await providerJson(response, "Instagram");
-  if (!result.id) throw new PublishError("Instagram did not return a media container ID.", { code: "PROVIDER_RESPONSE_INVALID", ambiguous: true });
+  if (!result.id)
+    throw new PublishError("Instagram did not return a media container ID.", {
+      code: "PROVIDER_RESPONSE_INVALID",
+      ambiguous: true,
+    });
   return { remoteOperationId: String(result.id) };
 }
 
 export async function getInstagramContainerStatus({ token, remoteOperationId }) {
-  if (!remoteOperationId) throw new PublishError("Instagram container ID is missing.", { code: "PROVIDER_OPERATION_ID_MISSING" });
+  if (!remoteOperationId)
+    throw new PublishError("Instagram container ID is missing.", {
+      code: "PROVIDER_OPERATION_ID_MISSING",
+    });
   const url = new URL(graph() + "/" + encodeURIComponent(remoteOperationId));
   url.searchParams.set("fields", "status_code");
   url.searchParams.set("access_token", token);
@@ -106,16 +191,30 @@ export async function getInstagramContainerStatus({ token, remoteOperationId }) 
 }
 
 export async function finalizeInstagramVideoContainer({ account, token, remoteOperationId }) {
-  requireScopes(account.granted_scopes, ["instagram_basic", "instagram_content_publish"], "Instagram");
-  if (!remoteOperationId) throw new PublishError("Instagram container ID is missing.", { code: "PROVIDER_OPERATION_ID_MISSING" });
+  requireScopes(
+    account.granted_scopes,
+    ["instagram_basic", "instagram_content_publish"],
+    "Instagram",
+  );
+  if (!remoteOperationId)
+    throw new PublishError("Instagram container ID is missing.", {
+      code: "PROVIDER_OPERATION_ID_MISSING",
+    });
   const params = new URLSearchParams({ creation_id: remoteOperationId, access_token: token });
-  const response = await fetch(graph() + "/" + encodeURIComponent(account.external_account_id) + "/media_publish", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params,
-    signal: AbortSignal.timeout(60000)
-  });
+  const response = await fetch(
+    graph() + "/" + encodeURIComponent(account.external_account_id) + "/media_publish",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params,
+      signal: AbortSignal.timeout(60000),
+    },
+  );
   const result = await providerJson(response, "Instagram");
-  if (!result.id) throw new PublishError("Instagram did not return a publication ID.", { code: "PROVIDER_RESPONSE_INVALID", ambiguous: true });
+  if (!result.id)
+    throw new PublishError("Instagram did not return a publication ID.", {
+      code: "PROVIDER_RESPONSE_INVALID",
+      ambiguous: true,
+    });
   return { externalPostId: String(result.id), permalink: null };
 }

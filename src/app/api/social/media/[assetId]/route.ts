@@ -8,19 +8,29 @@ export async function GET(
   { params }: { params: Promise<{ assetId: string }> },
 ) {
   const { assetId } = await params;
-  if (!UUID.test(assetId)) return NextResponse.json({ error: "Invalid asset ID." }, { status: 400 });
+  if (!UUID.test(assetId))
+    return NextResponse.json({ error: "Invalid asset ID." }, { status: 400 });
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
-  const { data: asset, error } = await supabase.from("social_media_assets")
-    .select("id,brand_id,original_filename,mime_type,file_size_bytes,width,height,duration_ms,processing_status,metadata,created_at")
-    .eq("id", assetId).maybeSingle();
-  if (error || !asset) return NextResponse.json({ error: "Media asset not found." }, { status: 404 });
+  const { data: asset, error } = await supabase
+    .from("social_media_assets")
+    .select(
+      "id,brand_id,original_filename,mime_type,file_size_bytes,width,height,duration_ms,processing_status,metadata,created_at",
+    )
+    .eq("id", assetId)
+    .maybeSingle();
+  if (error || !asset)
+    return NextResponse.json({ error: "Media asset not found." }, { status: 404 });
 
-  const metadata = asset.metadata && typeof asset.metadata === "object"
-    ? asset.metadata as Record<string, unknown> : {};
+  const metadata =
+    asset.metadata && typeof asset.metadata === "object"
+      ? (asset.metadata as Record<string, unknown>)
+      : {};
   return NextResponse.json({
     id: asset.id,
     brandId: asset.brand_id,

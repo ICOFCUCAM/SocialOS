@@ -1,4 +1,131 @@
 import Link from "next/link";
 import { ArrowRight, CalendarDays, Layers3, Sparkles, BarChart3, Globe2 } from "lucide-react";
-const features=[{icon:Layers3,title:"One connected workspace",text:"Bring brands, channels and collaborators into one clear operating space."},{icon:CalendarDays,title:"Plan with intention",text:"Coordinate campaigns and publishing across your social calendar."},{icon:Sparkles,title:"Create with AI",text:"Turn ideas into platform-ready content while keeping your brand voice."},{icon:BarChart3,title:"Understand what works",text:"Bring performance signals together to make better decisions."}];
-export default function Home(){return <main className="min-h-screen"><header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6"><Link href="/" className="flex items-center gap-3 text-xl font-semibold"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#176b4b] text-white">S</span>SocialOS</Link><div className="flex items-center gap-5 text-sm"><Link href="/login">Sign in</Link><Link href="/signup" className="rounded-full bg-[#176b4b] px-5 py-3 font-semibold text-white">Get started <ArrowRight className="ml-1 inline h-4 w-4"/></Link></div></header><section className="mx-auto grid max-w-7xl items-center gap-12 px-6 py-20 lg:grid-cols-2"><div><div className="mb-7 inline-flex items-center gap-2 rounded-full border border-[#dce8df] bg-white px-4 py-2 text-xs font-semibold text-[#176b4b]"><Globe2 className="h-4 w-4"/> BUILT FOR A CONNECTED WORLD</div><h1 className="text-5xl font-semibold leading-tight tracking-tight sm:text-7xl">Your entire social presence. <span className="text-[#176b4b]">In command.</span></h1><p className="mt-7 max-w-xl text-lg leading-8 text-[#68766d]">The workspace to plan, create, publish and understand your brand across social channels — without losing sight of the bigger picture.</p><div className="mt-9 flex flex-wrap gap-4"><Link href="/signup" className="rounded-full bg-[#176b4b] px-7 py-4 text-sm font-semibold text-white">Create your workspace <ArrowRight className="ml-2 inline h-4 w-4"/></Link><Link href="/login" className="rounded-full border border-[#dce5dd] bg-white px-7 py-4 text-sm font-semibold">I already have an account</Link></div></div><div className="rounded-[2rem] border border-white bg-white p-7 shadow-2xl shadow-[#183d2b]/10"><div className="flex items-center justify-between"><div><p className="text-xs uppercase tracking-widest text-[#87938b]">Workspace overview</p><h2 className="mt-2 text-xl font-semibold">Good morning, team</h2></div><span className="rounded-full bg-[#e8f2ec] px-3 py-2 text-xs font-semibold text-[#176b4b]">Preview</span></div><div className="mt-8 grid grid-cols-3 gap-3">{[["Channels","08"],["Scheduled","24"],["Brands","03"]].map(([a,b])=><div key={a} className="rounded-2xl bg-[#f7f9f6] p-4"><p className="text-xs text-[#829087]">{a}</p><p className="mt-2 text-3xl font-semibold">{b}</p></div>)}</div><p className="mt-8 text-sm font-semibold">Publishing rhythm</p><div className="mt-4 flex h-40 items-end gap-3 rounded-2xl bg-[#f7f9f6] p-5">{[42,66,52,84,58,94,72].map((h,i)=><div key={i} className="flex-1 rounded-t-lg bg-[#78a88a]" style={{height:h+"%"}}/>)}</div><p className="mt-4 text-center text-xs text-[#9aa49d]">Illustrative interface preview · Sample data</p></div></section><section className="border-y border-[#e8eee9] bg-white px-6 py-20"><div className="mx-auto max-w-7xl"><p className="text-xs font-semibold tracking-widest text-[#176b4b]">THE PLATFORM</p><h2 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight">Everything works better when it works together.</h2><div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">{features.map(({icon:Icon,title,text})=><article key={title} className="border-t border-[#dfe8e1] pt-6"><Icon className="h-5 w-5 text-[#176b4b]"/><h3 className="mt-5 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-[#738078]">{text}</p></article>)}</div></div></section><footer className="py-8 text-center text-xs text-[#87938b]">© SocialOS. A clearer way to manage your social world.</footer></main>}
+const features = [
+  {
+    icon: Layers3,
+    title: "One connected workspace",
+    text: "Bring brands, channels and collaborators into one clear operating space.",
+  },
+  {
+    icon: CalendarDays,
+    title: "Plan with intention",
+    text: "Coordinate campaigns and publishing across your social calendar.",
+  },
+  {
+    icon: Sparkles,
+    title: "Create with AI",
+    text: "Turn ideas into platform-ready content while keeping your brand voice.",
+  },
+  {
+    icon: BarChart3,
+    title: "Understand what works",
+    text: "Bring performance signals together to make better decisions.",
+  },
+];
+export default function Home() {
+  return (
+    <main className="min-h-screen">
+      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
+        <Link href="/" className="flex items-center gap-3 text-xl font-semibold">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#176b4b] text-white">
+            S
+          </span>
+          SocialOS
+        </Link>
+        <div className="flex items-center gap-5 text-sm">
+          <Link href="/login">Sign in</Link>
+          <Link
+            href="/signup"
+            className="rounded-full bg-[#176b4b] px-5 py-3 font-semibold text-white"
+          >
+            Get started <ArrowRight className="ml-1 inline h-4 w-4" />
+          </Link>
+        </div>
+      </header>
+      <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 py-20 lg:grid-cols-2">
+        <div>
+          <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-[#dce8df] bg-white px-4 py-2 text-xs font-semibold text-[#176b4b]">
+            <Globe2 className="h-4 w-4" /> BUILT FOR A CONNECTED WORLD
+          </div>
+          <h1 className="text-5xl leading-tight font-semibold tracking-tight sm:text-7xl">
+            Your entire social presence. <span className="text-[#176b4b]">In command.</span>
+          </h1>
+          <p className="mt-7 max-w-xl text-lg leading-8 text-[#68766d]">
+            The workspace to plan, create, publish and understand your brand across social channels
+            — without losing sight of the bigger picture.
+          </p>
+          <div className="mt-9 flex flex-wrap gap-4">
+            <Link
+              href="/signup"
+              className="rounded-full bg-[#176b4b] px-7 py-4 text-sm font-semibold text-white"
+            >
+              Create your workspace <ArrowRight className="ml-2 inline h-4 w-4" />
+            </Link>
+            <Link
+              href="/login"
+              className="rounded-full border border-[#dce5dd] bg-white px-7 py-4 text-sm font-semibold"
+            >
+              I already have an account
+            </Link>
+          </div>
+        </div>
+        <div className="rounded-[2rem] border border-white bg-white p-7 shadow-2xl shadow-[#183d2b]/10">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs tracking-widest text-[#87938b] uppercase">Workspace overview</p>
+              <h2 className="mt-2 text-xl font-semibold">Good morning, team</h2>
+            </div>
+            <span className="rounded-full bg-[#e8f2ec] px-3 py-2 text-xs font-semibold text-[#176b4b]">
+              Preview
+            </span>
+          </div>
+          <div className="mt-8 grid grid-cols-3 gap-3">
+            {[
+              ["Channels", "08"],
+              ["Scheduled", "24"],
+              ["Brands", "03"],
+            ].map(([a, b]) => (
+              <div key={a} className="rounded-2xl bg-[#f7f9f6] p-4">
+                <p className="text-xs text-[#829087]">{a}</p>
+                <p className="mt-2 text-3xl font-semibold">{b}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-8 text-sm font-semibold">Publishing rhythm</p>
+          <div className="mt-4 flex h-40 items-end gap-3 rounded-2xl bg-[#f7f9f6] p-5">
+            {[42, 66, 52, 84, 58, 94, 72].map((h, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-t-lg bg-[#78a88a]"
+                style={{ height: h + "%" }}
+              />
+            ))}
+          </div>
+          <p className="mt-4 text-center text-xs text-[#9aa49d]">
+            Illustrative interface preview · Sample data
+          </p>
+        </div>
+      </section>
+      <section className="border-y border-[#e8eee9] bg-white px-6 py-20">
+        <div className="mx-auto max-w-7xl">
+          <p className="text-xs font-semibold tracking-widest text-[#176b4b]">THE PLATFORM</p>
+          <h2 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight">
+            Everything works better when it works together.
+          </h2>
+          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            {features.map(({ icon: Icon, title, text }) => (
+              <article key={title} className="border-t border-[#dfe8e1] pt-6">
+                <Icon className="h-5 w-5 text-[#176b4b]" />
+                <h3 className="mt-5 font-semibold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#738078]">{text}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+      <footer className="py-8 text-center text-xs text-[#87938b]">
+        © SocialOS. A clearer way to manage your social world.
+      </footer>
+    </main>
+  );
+}

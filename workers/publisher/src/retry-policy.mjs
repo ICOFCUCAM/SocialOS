@@ -11,7 +11,7 @@ export function computeRetryDelay({ attemptCount, retryAfterMs = null, random = 
     return Math.min(MAX_RETRY_AFTER_MS, Math.max(1_000, retryAfterMs));
   }
   const attempt = Number.isInteger(attemptCount) ? Math.max(1, attemptCount) : 1;
-  const base = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * (2 ** (attempt - 1)));
+  const base = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * 2 ** (attempt - 1));
   const randomValue = random();
   const sample = Number.isFinite(randomValue) ? Math.min(1, Math.max(0, randomValue)) : 0.5;
   // Cap after jitter so the documented one-hour ceiling actually holds.
@@ -30,6 +30,6 @@ export function classifyPublishFailure(error, attemptCount, maxAttempts) {
     ambiguous,
     retryable,
     terminal: ambiguous || !retryable || attemptsExhausted,
-    code: ambiguous ? "PUBLISH_OUTCOME_UNKNOWN" : (error?.code || "PUBLISH_ERROR")
+    code: ambiguous ? "PUBLISH_OUTCOME_UNKNOWN" : error?.code || "PUBLISH_ERROR",
   });
 }

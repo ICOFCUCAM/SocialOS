@@ -8,19 +8,21 @@ const target = { id: "target-1", organization_id: "org-1", platform_post_id: "me
 
 test("maps Instagram lifetime insights without inventing absent metrics", async () => {
   let requested;
-  const fetchImpl = async url => {
+  const fetchImpl = async (url) => {
     requested = new URL(url);
     return {
       ok: true,
-      json: async () => ({ data: [
-        { name: "views", values: [{ value: 1200 }] },
-        { name: "reach", values: [{ value: 900 }] },
-        { name: "likes", values: [{ value: 80 }] },
-        { name: "comments", values: [{ value: 12 }] },
-        { name: "saved", values: [{ value: 5 }] },
-        { name: "shares", values: [{ value: 3 }] },
-        { name: "total_interactions", values: [{ value: 100 }] }
-      ] })
+      json: async () => ({
+        data: [
+          { name: "views", values: [{ value: 1200 }] },
+          { name: "reach", values: [{ value: 900 }] },
+          { name: "likes", values: [{ value: 80 }] },
+          { name: "comments", values: [{ value: 12 }] },
+          { name: "saved", values: [{ value: 5 }] },
+          { name: "shares", values: [{ value: 3 }] },
+          { name: "total_interactions", values: [{ value: 100 }] },
+        ],
+      }),
     };
   };
   const [record] = await collectMetaInsights(target, "instagram", "token", fetchImpl);
@@ -38,10 +40,12 @@ test("maps Instagram lifetime insights without inventing absent metrics", async 
 test("maps current Facebook Page post media-view metrics", async () => {
   const fetchImpl = async () => ({
     ok: true,
-    json: async () => ({ data: [
-      { name: "post_media_view", values: [{ value: 600 }] },
-      { name: "post_total_media_view_unique", values: [{ value: 450 }] }
-    ] })
+    json: async () => ({
+      data: [
+        { name: "post_media_view", values: [{ value: 600 }] },
+        { name: "post_total_media_view_unique", values: [{ value: 450 }] },
+      ],
+    }),
   });
   const [record] = await collectMetaInsights(target, "facebook", "token", fetchImpl);
   assert.equal(record.impressions, 600);
@@ -56,6 +60,6 @@ test("marks permission failures for reconnect and does not emit zero metrics", a
   const denied = async () => ({ ok: false, status: 403, json: async () => ({ error: "denied" }) });
   await assert.rejects(
     collectMetaInsights(target, "instagram", "token", denied),
-    error => error.reauthorize === true
+    (error) => error.reauthorize === true,
   );
 });

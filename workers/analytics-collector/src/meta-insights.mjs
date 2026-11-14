@@ -14,16 +14,22 @@ async function requestInsights(objectId, metrics, token, fetchImpl) {
   const response = await fetchImpl(url, {
     headers: { Authorization: "Bearer " + token, Accept: "application/json" },
     signal: AbortSignal.timeout(30000),
-    cache: "no-store"
+    cache: "no-store",
   });
   let payload = {};
-  try { payload = await response.json(); } catch { /* handled below */ }
+  try {
+    payload = await response.json();
+  } catch {
+    /* handled below */
+  }
   if (!response.ok) {
-    const error = new Error(response.status === 401 || response.status === 403
-      ? "Meta Insights permission is unavailable; reconnect the account with insights access."
-      : response.status === 429 || response.status >= 500
-        ? "Meta Insights is temporarily unavailable."
-        : "Meta Insights rejected the requested metrics.");
+    const error = new Error(
+      response.status === 401 || response.status === 403
+        ? "Meta Insights permission is unavailable; reconnect the account with insights access."
+        : response.status === 429 || response.status >= 500
+          ? "Meta Insights is temporarily unavailable."
+          : "Meta Insights rejected the requested metrics.",
+    );
     error.retryable = response.status === 429 || response.status >= 500;
     error.reauthorize = response.status === 401 || response.status === 403;
     throw error;
@@ -42,9 +48,9 @@ export async function collectMetaInsights(target, platformCode, token, fetchImpl
     ? ["views", "reach", "likes", "comments", "saved", "shares", "total_interactions"]
     : ["post_media_view", "post_total_media_view_unique"];
   const response = await requestInsights(target.platform_post_id, requested, token, fetchImpl);
-  const values = new Map(response.map(item => [item.name, scalarMetric(item)]));
+  const values = new Map(response.map((item) => [item.name, scalarMetric(item)]));
   // Metrics Meta did not return are null (unknown), never undefined or zero.
-  const metric = name => values.get(name) ?? null;
+  const metric = (name) => values.get(name) ?? null;
   const views = metric(isInstagram ? "views" : "post_media_view");
   const reach = metric(isInstagram ? "reach" : "post_total_media_view_unique");
   const likes = metric("likes");
@@ -52,7 +58,7 @@ export async function collectMetaInsights(target, platformCode, token, fetchImpl
   const shares = metric("shares");
   const saves = metric("saved");
   const totalInteractions = metric("total_interactions");
-  const componentEngagements = [likes, comments, shares, saves].some(value => value !== null)
+  const componentEngagements = [likes, comments, shares, saves].some((value) => value !== null)
     ? [likes, comments, shares, saves].reduce((sum, value) => sum + (value ?? 0), 0)
     : null;
 
@@ -73,12 +79,15 @@ export async function collectMetaInsights(target, platformCode, token, fetchImpl
       provider: "meta",
       platform: platformCode,
       metric_semantics: "lifetime_snapshot",
-      raw_metric_names: requested.filter(name => values.has(name))
+      raw_metric_names: requested.filter((name) => values.has(name)),
     },
-    collected_at: new Date().toISOString()
+    collected_at: new Date().toISOString(),
   };
-  const hasMetrics = Object.entries(record).some(([key, value]) =>
-    ["impressions", "reach", "likes", "comments", "shares", "saves", "engagements"].includes(key) && value !== null
+  const hasMetrics = Object.entries(record).some(
+    ([key, value]) =>
+      ["impressions", "reach", "likes", "comments", "shares", "saves", "engagements"].includes(
+        key,
+      ) && value !== null,
   );
   return hasMetrics ? [record] : [];
 }

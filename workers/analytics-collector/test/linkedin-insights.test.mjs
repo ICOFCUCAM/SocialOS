@@ -6,20 +6,29 @@ process.env.LINKEDIN_API_VERSION = "202610";
 const target = {
   id: "target-1",
   organization_id: "org-1",
-  platform_post_id: "urn:li:share:123456789"
+  platform_post_id: "urn:li:share:123456789",
 };
 
 test("requests lifetime LinkedIn member post metrics and maps normalized fields", async () => {
   const requested = [];
-  const fetchImpl = async url => {
+  const fetchImpl = async (url) => {
     requested.push(new URL(url));
     const metric = new URL(url).searchParams.get("queryType");
     const counts = {
-      IMPRESSION: 1200, MEMBERS_REACHED: 900, REACTION: 80,
-      COMMENT: 12, RESHARE: 3, POST_SAVE: 5, LINK_CLICKS: 20,
-      FOLLOWER_GAINED_FROM_CONTENT: 2, PROFILE_VIEW_FROM_CONTENT: 7
+      IMPRESSION: 1200,
+      MEMBERS_REACHED: 900,
+      REACTION: 80,
+      COMMENT: 12,
+      RESHARE: 3,
+      POST_SAVE: 5,
+      LINK_CLICKS: 20,
+      FOLLOWER_GAINED_FROM_CONTENT: 2,
+      PROFILE_VIEW_FROM_CONTENT: 7,
     };
-    return { ok: true, json: async () => ({ elements: [{ count: counts[metric], metricType: metric }] }) };
+    return {
+      ok: true,
+      json: async () => ({ elements: [{ count: counts[metric], metricType: metric }] }),
+    };
   };
   const [record] = await collectLinkedInInsights(target, "token", fetchImpl);
   assert.equal(requested.length, 9);
@@ -42,14 +51,21 @@ test("requests lifetime LinkedIn member post metrics and maps normalized fields"
 
 test("supports ugcPost URNs and preserves unavailable metric values as null", async () => {
   let count = 0;
-  const fetchImpl = async url => {
+  const fetchImpl = async (url) => {
     const parsed = new URL(url);
     assert.match(parsed.searchParams.get("entity"), /^\(ugcPost:/);
     count++;
-    return { ok: true, json: async () => ({ elements: parsed.searchParams.get("queryType") === "IMPRESSION" ? [{ count: 50 }] : [] }) };
+    return {
+      ok: true,
+      json: async () => ({
+        elements: parsed.searchParams.get("queryType") === "IMPRESSION" ? [{ count: 50 }] : [],
+      }),
+    };
   };
   const [record] = await collectLinkedInInsights(
-    { ...target, platform_post_id: "urn:li:ugcPost:987654321" }, "token", fetchImpl
+    { ...target, platform_post_id: "urn:li:ugcPost:987654321" },
+    "token",
+    fetchImpl,
   );
   assert.equal(count, 9);
   assert.equal(record.impressions, 50);
@@ -60,11 +76,15 @@ test("supports ugcPost URNs and preserves unavailable metric values as null", as
 test("rejects malformed post URNs and marks authorization failures", async () => {
   await assert.rejects(
     collectLinkedInInsights({ ...target, platform_post_id: "not-a-urn" }, "token"),
-    /valid ugcPost or share URN/
+    /valid ugcPost or share URN/,
   );
-  const denied = async () => ({ ok: false, status: 403, json: async () => ({ message: "forbidden" }) });
+  const denied = async () => ({
+    ok: false,
+    status: 403,
+    json: async () => ({ message: "forbidden" }),
+  });
   await assert.rejects(
     collectLinkedInInsights(target, "token", denied),
-    error => error.reauthorize === true
+    (error) => error.reauthorize === true,
   );
 });
