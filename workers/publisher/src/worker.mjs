@@ -134,7 +134,11 @@ async function refreshProviderToken(account, row) {
 }
 async function getToken(account) {
   const row = await must(await db.from("social_account_tokens").select("*").eq("social_account_id", account.id).eq("organization_id", account.organization_id).single(), "Encrypted credentials not found");
-  if (row.access_token_expires_at && Date.parse(row.access_token_expires_at) <= Date.now() + 120_000) {
+  // Meta Page tokens do not expire; accounts connected before that was recorded
+  // still carry the user token's ~60-day expiry, so ignore it. A revoked token
+  // surfaces as HTTP 401 from the provider and is handled as reauthorization.
+  const isMetaPageToken = account.platform === "facebook" || account.platform === "instagram";
+  if (!isMetaPageToken && row.access_token_expires_at && Date.parse(row.access_token_expires_at) <= Date.now() + 120_000) {
     try {
       await refreshProviderToken(account, row);
     } catch (error) {

@@ -43,6 +43,7 @@ Required environment:
 - `SOCIAL_TOKEN_KEY_VERSION` when using a versioned key ring
 - `META_GRAPH_API_VERSION` for Meta collection
 - `LINKEDIN_API_VERSION` (YYYYMM) for LinkedIn collection
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` and `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` to refresh expired access tokens
 
 Optional:
 - `ANALYTICS_MAX_TARGETS` (default 100, max 500)
@@ -53,7 +54,8 @@ The job is intentionally one-shot. The scheduler owns cadence and retry policy. 
 
 ## Data handling
 - Only published targets with a provider post/video ID are considered.
-- Expiring tokens are skipped; the existing publisher refresh process must renew them or the user must reconnect.
+- Expired YouTube and LinkedIn access tokens are refreshed under the same `claim_social_token_refresh` lock the publisher uses, so the two workers never rotate a refresh token concurrently. Meta Page tokens do not expire and are used as stored.
+- Google quota errors (HTTP 403 `quotaExceeded` and similar) are retried on a later run; they do not mark the account for reconnection.
 - Missing analytics scope is reported as a skip, not as zero metrics.
 - Daily records are upserted, not added, so repeat collection is idempotent.
 - The worker writes through the Supabase service role. Do not expose service credentials to browser code.

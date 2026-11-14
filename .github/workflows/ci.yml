@@ -36,6 +36,8 @@ jobs:
           node --check workers/analytics-collector/src/collector.mjs
           node --check workers/analytics-collector/src/meta-insights.mjs
           node --check workers/analytics-collector/src/linkedin-insights.mjs
+          node --check workers/analytics-collector/src/oauth-token.mjs
+          node --check workers/analytics-collector/src/provider-errors.mjs
           npm test --prefix workers/analytics-collector
           npm test --prefix workers/publisher
       - name: Media processor syntax and tests

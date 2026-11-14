@@ -34,6 +34,7 @@ const messages:Record<string,string> = {
   connected:"Social account connected and credentials encrypted successfully.",
   meta_pages_unavailable:"Meta did not return the Pages available to this account. Check the requested permissions and Page access.",
   meta_no_pages:"No Facebook Pages were available to this account. Connect a Facebook Page and try again.",
+  meta_permissions_unavailable:"Meta did not confirm which permissions were granted. Please try connecting again.",
   meta_no_accounts:"Meta authorization succeeded, but no eligible social account was discovered.",
   denied:"The provider authorization was declined.",
   invalid_state:"The connection could not be verified. Please try again.",

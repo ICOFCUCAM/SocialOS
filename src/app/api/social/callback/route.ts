@@ -64,6 +64,14 @@ export async function GET(request:NextRequest) {
       const longLived=await longLivedResponse.json() as TokenResponse;
       if (!longLivedResponse.ok || !longLived.access_token) return clear(returnToApp(request,"meta_token_exchange_failed"));
       const metaAccessToken=longLived.access_token;
+      // Record what the user actually granted: Meta lets users untick individual
+      // permissions, so the requested scope list is not proof of access.
+      const permissionsUrl=new URL(`https://graph.facebook.com/${graphVersion}/me/permissions`);
+      permissionsUrl.searchParams.set("access_token",metaAccessToken);
+      const permissionsResponse=await fetch(permissionsUrl,{cache:"no-store",signal:AbortSignal.timeout(15000)});
+      const permissionsData=await permissionsResponse.json() as {data?:{permission?:string;status?:string}[]};
+      if (!permissionsResponse.ok || !Array.isArray(permissionsData.data)) return clear(returnToApp(request,"meta_permissions_unavailable"));
+      const metaGrantedScopes=permissionsData.data.filter(item=>item.status==="granted"&&typeof item.permission==="string").map(item=>item.permission as string);
       const pagesUrl=new URL(`https://graph.facebook.com/${graphVersion}/me/accounts`);
       pagesUrl.searchParams.set("fields","id,name,access_token,instagram_business_account{id,username,profile_picture_url}");
       pagesUrl.searchParams.set("access_token",metaAccessToken);
@@ -81,16 +89,19 @@ export async function GET(request:NextRequest) {
         const pageAccount=await admin.from("social_accounts").upsert({
           organization_id:signed.organizationId,brand_id:signed.brandId,platform_id:platformMap.get("facebook"),
           external_account_id:page.id,account_name:page.name,account_type:"facebook_page",
-          connection_status:"connected",granted_scopes:provider.scopes,
+          connection_status:"connected",granted_scopes:metaGrantedScopes,
           last_verified_at:new Date().toISOString(),connected_by:user.id,
           metadata:{provider:"meta",parent_page_id:page.id}
         },{onConflict:"organization_id,platform_id,external_account_id"}).select("id").single();
         if (pageAccount.error || !pageAccount.data) throw new Error("Unable to save Facebook Page.");
+        // Page tokens obtained with a long-lived user token have no expiry. Storing the
+        // user token's ~60-day expiry made workers force a needless reconnect; a
+        // later revocation is detected from the provider's 401 response instead.
         const pageToken=encryptToken(page.access_token);
         const pageTokenWrite=await admin.from("social_account_tokens").upsert({
           organization_id:signed.organizationId,social_account_id:pageAccount.data.id,
           access_token_nonce:toPgBytea(pageToken.nonce),access_token_ciphertext:toPgBytea(pageToken.ciphertext),access_token_tag:toPgBytea(pageToken.tag),
-          encryption_algorithm:pageToken.algorithm,encryption_key_version:pageToken.keyVersion,access_token_expires_at:longLived.expires_in?new Date(Date.now()+longLived.expires_in*1000).toISOString():null,token_type:"Bearer"
+          encryption_algorithm:pageToken.algorithm,encryption_key_version:pageToken.keyVersion,access_token_expires_at:null,token_type:"Bearer"
         },{onConflict:"social_account_id"});
         if (pageTokenWrite.error) throw new Error("Unable to store Facebook Page credentials.");
         saved++;
@@ -101,7 +112,7 @@ export async function GET(request:NextRequest) {
             external_account_id:instagram.id,account_name:instagram.username??"Instagram professional account",
             account_username:instagram.username??null,account_type:"instagram_business",
             profile_image_url:instagram.profile_picture_url??null,connection_status:"connected",
-            granted_scopes:provider.scopes,last_verified_at:new Date().toISOString(),connected_by:user.id,
+            granted_scopes:metaGrantedScopes,last_verified_at:new Date().toISOString(),connected_by:user.id,
             metadata:{provider:"meta",parent_page_id:page.id,facebook_page_name:page.name}
           },{onConflict:"organization_id,platform_id,external_account_id"}).select("id").single();
           if (igAccount.error || !igAccount.data) throw new Error("Unable to save Instagram account.");
@@ -109,7 +120,7 @@ export async function GET(request:NextRequest) {
           const igTokenWrite=await admin.from("social_account_tokens").upsert({
             organization_id:signed.organizationId,social_account_id:igAccount.data.id,
             access_token_nonce:toPgBytea(igToken.nonce),access_token_ciphertext:toPgBytea(igToken.ciphertext),access_token_tag:toPgBytea(igToken.tag),
-            encryption_algorithm:igToken.algorithm,encryption_key_version:igToken.keyVersion,access_token_expires_at:longLived.expires_in?new Date(Date.now()+longLived.expires_in*1000).toISOString():null,token_type:"Bearer"
+            encryption_algorithm:igToken.algorithm,encryption_key_version:igToken.keyVersion,access_token_expires_at:null,token_type:"Bearer"
           },{onConflict:"social_account_id"});
           if (igTokenWrite.error) throw new Error("Unable to store Instagram credentials.");
           saved++;

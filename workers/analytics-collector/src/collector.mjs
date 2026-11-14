@@ -1,7 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
-import { createDecipheriv } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { collectMetaInsights } from "./meta-insights.mjs";
 import { collectLinkedInInsights } from "./linkedin-insights.mjs";
+import { getAccessToken } from "./oauth-token.mjs";
+import { isGoogleQuotaError } from "./provider-errors.mjs";
 
 const required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
 for (const name of required) if (!process.env[name]) throw new Error(name + " is required.");
@@ -13,31 +15,7 @@ const maxTargets = Math.max(1, Math.min(500, Number(process.env.ANALYTICS_MAX_TA
 const lookbackDays = Math.max(7, Math.min(90, Number(process.env.ANALYTICS_LOOKBACK_DAYS) || 35));
 const delayMs = Math.max(250, Number(process.env.ANALYTICS_REQUEST_DELAY_MS) || 1000);
 
-function bytea(value) {
-  if (Buffer.isBuffer(value)) return value;
-  if (typeof value !== "string") throw new Error("Encrypted token field is missing.");
-  const hex = value.startsWith("\\x") ? value.slice(2) : value;
-  if (!/^(?:[0-9a-f]{2})+$/i.test(hex)) throw new Error("Encrypted token field has invalid bytea encoding.");
-  return Buffer.from(hex, "hex");
-}
-function decryptToken(row) {
-  let keys = {};
-  if (process.env.SOCIAL_TOKEN_ENCRYPTION_KEYS) {
-    try { keys = JSON.parse(process.env.SOCIAL_TOKEN_ENCRYPTION_KEYS); }
-    catch { throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEYS must be a JSON object."); }
-  }
-  const version = row.encryption_key_version;
-  const raw = keys[version] || (version === (process.env.SOCIAL_TOKEN_KEY_VERSION || "v1") ? process.env.SOCIAL_TOKEN_ENCRYPTION_KEY : undefined);
-  if (!raw) throw new Error("OAuth encryption key version is unavailable.");
-  const key = Buffer.from(raw, "base64");
-  if (key.length !== 32) throw new Error("OAuth encryption key must decode to 32 bytes.");
-  const decipher = createDecipheriv("aes-256-gcm", key, bytea(row.access_token_nonce));
-  decipher.setAuthTag(bytea(row.access_token_tag));
-  return Buffer.concat([
-    decipher.update(bytea(row.access_token_ciphertext)),
-    decipher.final()
-  ]).toString("utf8");
-}
+const workerId = "analytics-" + randomUUID();
 function dateOnly(date) { return date.toISOString().slice(0, 10); }
 function daysAgo(days) { const d = new Date(); d.setUTCDate(d.getUTCDate() - days); return dateOnly(d); }
 function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -63,13 +41,17 @@ async function queryYouTubeAnalytics(token, videoId, startDate, endDate) {
   try { payload = await response.json(); } catch { /* handled below */ }
   if (!response.ok) {
     const status = response.status;
-    const error = new Error(status === 401 || status === 403
-      ? "YouTube Analytics access is unavailable; reconnect with the YouTube analytics read scope."
-      : status === 429 || status >= 500
-        ? "YouTube Analytics temporarily unavailable."
-        : "YouTube Analytics rejected the report request.");
-    error.retryable = status === 429 || status >= 500;
-    error.reauthorize = status === 401 || status === 403;
+    // Google reports quota exhaustion as 403; that is not a revoked permission.
+    const quota = isGoogleQuotaError(payload);
+    const error = new Error(quota
+      ? "YouTube Analytics quota is exhausted; collection will resume later."
+      : status === 401 || status === 403
+        ? "YouTube Analytics access is unavailable; reconnect with the YouTube analytics read scope."
+        : status === 429 || status >= 500
+          ? "YouTube Analytics temporarily unavailable."
+          : "YouTube Analytics rejected the report request.");
+    error.retryable = quota || status === 429 || status >= 500;
+    error.reauthorize = !quota && (status === 401 || status === 403);
     throw error;
   }
   const headers = payload.columnHeaders?.map(item => item.name) ?? [];
@@ -156,12 +138,7 @@ async function main() {
       const { data: tokenRow, error: tokenError } = await db.from("social_account_tokens")
         .select("*").eq("social_account_id", account.id).eq("organization_id", target.organization_id).single();
       if (tokenError || !tokenRow) { skipped++; continue; }
-      if (tokenRow.access_token_expires_at && Date.parse(tokenRow.access_token_expires_at) <= Date.now() + 120000) {
-        skipped++;
-        console.warn("Skipped account with an expiring token; refresh/reconnect before collection:", account.id);
-        continue;
-      }
-      const token = decryptToken(tokenRow);
+      const token = await getAccessToken({ db, account, platformCode: platform.code, tokenRow, workerId });
       if (platform.code === "youtube") collected += await collectYouTubeTarget(target, token);
       else if (platform.code === "linkedin") collected += await persistLinkedInTarget(target, token);
       else collected += await persistMetaTarget(target, platform.code, token);
