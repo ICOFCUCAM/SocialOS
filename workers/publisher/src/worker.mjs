@@ -221,7 +221,7 @@ async function recordJobEvent(job, target, eventType, details = {}) {
     message: details.message || null,
     metadata: details.metadata || {}
   });
-  if (error) process.stderr.write(JSON.stringify({ event: "publish_event_record_failed", jobId: job.id, code: error.code || "EVENT_WRITE_FAILED" }) + "\\n");
+  if (error) process.stderr.write(JSON.stringify({ event: "publish_event_record_failed", jobId: job.id, code: error.code || "EVENT_WRITE_FAILED" }) + "\n");
 }
 async function finish(job, target, publication) {
   const now = new Date().toISOString();
@@ -496,7 +496,7 @@ async function pollInstagramProviderOperations() {
         last_error_code: error.code || "INSTAGRAM_STATUS_CHECK_FAILED",
         last_error_message: safeMessage(error)
       }).eq("id", operation.id).eq("state", "processing").eq("locked_by", workerId);
-      process.stderr.write(JSON.stringify({ event: "instagram_operation_poll_failed", operationId: operation.id, code: error.code || "POLL_FAILED" }) + "\\n");
+      process.stderr.write(JSON.stringify({ event: "instagram_operation_poll_failed", operationId: operation.id, code: error.code || "POLL_FAILED" }) + "\n");
     }
   }));
 }
@@ -545,7 +545,7 @@ async function handleJob(job) {
   } catch (error) {
     if (rateLimitScope && (error?.status === 429 || error?.code === "YOUTUBE_DAILY_QUOTA_EXCEEDED" || error?.code === "YOUTUBE_RATE_LIMIT_EXCEEDED" || error?.code === "LINKEDIN_QUOTA_EXCEEDED")) {
       try { await deferProviderCapacity({ ...rateLimitScope, businessId: error.businessId || null, quotaScope: error.quotaScope || null }, error.retryAfterMs || 60000); }
-      catch (coordinationError) { process.stderr.write(JSON.stringify({ event: "provider_rate_limit_persist_failed", jobId: job.id, code: coordinationError.code || "RATE_LIMIT_COORDINATOR_UNAVAILABLE" }) + "\\n"); }
+      catch (coordinationError) { process.stderr.write(JSON.stringify({ event: "provider_rate_limit_persist_failed", jobId: job.id, code: coordinationError.code || "RATE_LIMIT_COORDINATOR_UNAVAILABLE" }) + "\n"); }
     }
     const lookup = await db.from("social_post_targets").select("*").eq("id", job.target_id).eq("organization_id", job.organization_id).maybeSingle();
     if (lookup.data?.platform_post_id) {

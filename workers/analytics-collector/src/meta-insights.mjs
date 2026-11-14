@@ -1,10 +1,10 @@
-const META_GRAPH_VERSION = process.env.META_GRAPH_API_VERSION;
-
+// Read at call time so configuration (and tests) can set it after import.
 function graphBase() {
-  if (!META_GRAPH_VERSION || !/^v\\d+\\.\\d+$/.test(META_GRAPH_VERSION)) {
+  const version = process.env.META_GRAPH_API_VERSION;
+  if (!version || !/^v\d+\.\d+$/.test(version)) {
     throw new Error("META_GRAPH_API_VERSION must be explicitly configured.");
   }
-  return "https://graph.facebook.com/" + META_GRAPH_VERSION;
+  return "https://graph.facebook.com/" + version;
 }
 
 async function requestInsights(objectId, metrics, token, fetchImpl) {
@@ -43,13 +43,15 @@ export async function collectMetaInsights(target, platformCode, token, fetchImpl
     : ["post_media_view", "post_total_media_view_unique"];
   const response = await requestInsights(target.platform_post_id, requested, token, fetchImpl);
   const values = new Map(response.map(item => [item.name, scalarMetric(item)]));
-  const views = values.get(isInstagram ? "views" : "post_media_view");
-  const reach = values.get(isInstagram ? "reach" : "post_total_media_view_unique");
-  const likes = values.get("likes");
-  const comments = values.get("comments");
-  const shares = values.get("shares");
-  const saves = values.get("saved");
-  const totalInteractions = values.get("total_interactions");
+  // Metrics Meta did not return are null (unknown), never undefined or zero.
+  const metric = name => values.get(name) ?? null;
+  const views = metric(isInstagram ? "views" : "post_media_view");
+  const reach = metric(isInstagram ? "reach" : "post_total_media_view_unique");
+  const likes = metric("likes");
+  const comments = metric("comments");
+  const shares = metric("shares");
+  const saves = metric("saved");
+  const totalInteractions = metric("total_interactions");
   const componentEngagements = [likes, comments, shares, saves].some(value => value !== null)
     ? [likes, comments, shares, saves].reduce((sum, value) => sum + (value ?? 0), 0)
     : null;

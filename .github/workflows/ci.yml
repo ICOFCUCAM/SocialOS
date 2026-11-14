@@ -4,7 +4,7 @@ on:
   pull_request:
   workflow_dispatch:
   push:
-    branches: [main, "feat/**"]
+    branches: [main, "feat/**", "integration/**", "claude/**"]
 
 permissions:
   contents: read
@@ -38,6 +38,12 @@ jobs:
           node --check workers/analytics-collector/src/linkedin-insights.mjs
           npm test --prefix workers/analytics-collector
           npm test --prefix workers/publisher
+      - name: Media processor syntax and tests
+        run: |
+          node --check workers/media-processor/src/worker.mjs
+          node --check workers/media-processor/src/scanner.mjs
+          node --check workers/media-processor/src/rendition-profiles.mjs
+          npm test --prefix workers/media-processor
       - name: TypeScript
         run: npm run typecheck
       - name: ESLint

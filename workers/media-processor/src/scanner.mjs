@@ -12,7 +12,14 @@ export async function scanFile(file, {
     const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
     child.stdout.on("data", chunk => { stdout = (stdout + chunk.toString()).slice(-4000); });
     child.stderr.on("data", chunk => { stderr = (stderr + chunk.toString()).slice(-4000); });
-    child.on("error", error => { clearTimeout(timer); reject(error); });
+    // A missing or unlaunchable scanner must fail closed with a classified code,
+    // never as an unclassified error and never as a clean result.
+    child.on("error", error => {
+      clearTimeout(timer);
+      reject(Object.assign(new Error("ClamAV scanner could not be started: " + error.message), {
+        code: "SCANNER_UNAVAILABLE", cause: error
+      }));
+    });
     child.on("close", code => {
       clearTimeout(timer);
       if (code === 0) return resolve({ status: "clean", output: stdout });
