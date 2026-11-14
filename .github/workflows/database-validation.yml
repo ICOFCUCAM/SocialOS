@@ -1,0 +1,74 @@
+name: SocialOS database validation
+
+on:
+  # Validate feature-branch changes through the PR event only. Running both
+  # push and pull_request for the same commit created duplicate DB stacks.
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: socialos-db-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-replay:
+    env:
+      # Local Supabase database (port from supabase/config.toml [db]); disposable CI stack only.
+      LOCAL_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+    name: Replay all database migrations locally
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          # Pinned: an unpinned "latest" CLI broke this job when 3.x dropped [inbucket].
+          version: 3.1.0
+
+      - name: Start local Supabase database
+        run: supabase start
+
+      - name: Rebuild database from migration history
+        run: supabase db reset
+
+      - name: Verify migration ledger
+        run: |
+          supabase migration list
+          migration_files="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)"
+          if [ "$migration_files" -lt 1 ]; then
+            echo "No SQL migrations found" >&2
+            exit 1
+          fi
+          echo "Replayed $migration_files SQL migration files from a clean local database."
+
+      - name: Verify schema and security invariants
+        # psql runs multi-statement files; `supabase db query -f` (CLI 3.x) sends a
+        # file as one prepared statement and rejects multiple commands.
+        run: |
+          psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/migration_smoke.sql
+
+      - name: Run multi-tenant isolation regression tests
+        run: psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql
+
+      - name: Lint local database schema
+        run: supabase db lint --fail-on error
+
+      - name: Generate database types
+        run: |
+          supabase gen types typescript > /tmp/socialos.types.ts
+          test -s /tmp/socialos.types.ts
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop
